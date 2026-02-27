@@ -4,28 +4,27 @@ USER root
 ARG DEBIAN_FRONTEND=noninteractive
 
 # ============================================================
-# Runtime tools
-# IMPORTANT: apt-get upgrade pulls patched Debian packages
-# (fixes most glibc/sqlite/zlib/pam/git CVEs inherited
-#  from the base image)
+# OS upgrades (base-image CVEs)
+# - Pull patched Debian packages already available in repos
+# - Install runtime tools
 # ============================================================
 RUN set -eux; \
     apt-get update; \
     apt-get -y upgrade; \
     apt-get install -y --no-install-recommends \
-        git \
-        openssh-client \
-        curl \
         ca-certificates \
+        curl \
+        git \
         jq \
         less \
-        procps \
-        postgresql-client; \
+        openssh-client \
+        postgresql-client \
+        procps; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Build dependencies (temporary)
+# Build deps (temporary) for pip wheels; removed later
 # ============================================================
 RUN set -eux; \
     apt-get update; \
@@ -43,25 +42,35 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# pip configuration
+# pip behavior and PATH
 # ============================================================
 ENV PATH="/home/airflow/.local/bin:${PATH}" \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-# OPTIONAL (recommended in enterprise):
-# Force pip to use Artifactory only.
+# OPTIONAL (recommended): force pip to Artifactory only
 # ENV PIP_INDEX_URL="https://<ARTIFACTORY_HOST>/api/pypi/<REPO>/simple" \
 #     PIP_EXTRA_INDEX_URL="" \
 #     PIP_TRUSTED_HOST="<ARTIFACTORY_HOST>"
 
 USER airflow
 
-# Upgrade packaging tooling (reduces findings)
-RUN python -m pip install --upgrade pip setuptools wheel
+# ============================================================
+# Highest-signal Python remediations
+# - Upgrade pip tooling
+# - Pin starlette to fixed version (>= 0.49.1)
+# ============================================================
+RUN set -eux; \
+    python -m pip install --upgrade pip setuptools wheel
 
-# Python dependencies
-RUN pip install \
+# If starlette is only a transitive dep, this pin forces the fix.
+# If something requires an older starlette, pip will error (good: forces resolution).
+RUN set -eux; \
+    pip install --upgrade "starlette>=0.49.1"
+
+# Your project deps (keep as-is, but prefer pinning via constraints later)
+RUN set -eux; \
+    pip install \
         psycopg2-binary \
         redshift-connector \
         sqlalchemy \
@@ -74,7 +83,7 @@ RUN pip install \
         apache-airflow-providers-postgres
 
 # ============================================================
-# Remove build dependencies to reduce attack surface
+# Remove build deps to reduce surface area
 # ============================================================
 USER root
 RUN set -eux; \
