@@ -1,33 +1,22 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim-trixie
 
 USER root
 ARG DEBIAN_FRONTEND=noninteractive
 
-# ============================================================
-# OS upgrades + minimal tools
-# ============================================================
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
 RUN set -eux; \
     apt-get update; \
     apt-get -y upgrade; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
-        git \
         jq \
-        less \
         openssh-client \
         postgresql-client \
-        procps; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Build deps (temporary) for pip wheels; removed later
-# ============================================================
-RUN set -eux; \
-    apt-get update; \
-    apt-get -y upgrade; \
-    apt-get install -y --no-install-recommends \
+        procps \
+        \
         build-essential \
         gcc \
         g++ \
@@ -36,24 +25,13 @@ RUN set -eux; \
         libssl-dev \
         libffi-dev \
         zlib1g-dev; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# pip behavior
-# ============================================================
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
-
-# OPTIONAL (recommended): force pip to Artifactory only
-# ENV PIP_INDEX_URL="https://<ARTIFACTORY_HOST>/api/pypi/<REPO>/simple" \
-#     PIP_EXTRA_INDEX_URL="" \
-#     PIP_TRUSTED_HOST="<ARTIFACTORY_HOST>"
-
-# ============================================================
-# Python packages (no airflow, no fastapi)
-# ============================================================
-RUN set -eux; \
+    \
+    echo "==== OS package versions (selected) ===="; \
+    dpkg-query -W -f='${Package}\t${Version}\n' \
+      libsqlite3-0 sqlite3 zlib1g openssl libssl3 libc6 2>/dev/null || true; \
+    echo "==== OS manifest (all) ===="; \
+    dpkg-query -W -f='${Package}\t${Version}\n' | sort > /image-dpkg-manifest.tsv; \
+    \
     python -m pip install --upgrade pip setuptools wheel; \
     pip install \
         psycopg2-binary \
@@ -66,21 +44,11 @@ RUN set -eux; \
         sqlfluff \
         autopep8; \
     pip uninstall -y fastapi starlette || true; \
-    pip check
-
-# ============================================================
-# Remove build deps to reduce surface area
-# ============================================================
-RUN set -eux; \
+    pip check; \
+    \
     apt-get purge -y --auto-remove \
-        build-essential \
-        gcc \
-        g++ \
-        make \
-        libpq-dev \
-        libssl-dev \
-        libffi-dev \
-        zlib1g-dev; \
+        build-essential gcc g++ make \
+        libpq-dev libssl-dev libffi-dev zlib1g-dev; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
