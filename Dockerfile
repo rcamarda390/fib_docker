@@ -53,40 +53,42 @@ ENV PATH="/home/airflow/.local/bin:${PATH}" \
 #     PIP_TRUSTED_HOST="<ARTIFACTORY_HOST>"
 
 USER airflow
-
-# ============================================================
-# Python remediations
-# - Keep tooling current
-# - Remove FastAPI explicitly (and keep it from forcing old Starlette)
-# - Upgrade Starlette to fixed version
-# - pip check hard-fails on dependency conflicts
-# ============================================================
-RUN set -eux; \
-    python -m pip install --upgrade pip setuptools wheel
-
 # Remove FastAPI if it exists (it pins starlette < 0.49.0)
 RUN set -eux; \
     pip uninstall -y fastapi || true
 
-# Upgrade Starlette to the fixed line (>= 0.49.1)
+# Upgrade Starlette, then print the exact dependency conflict and fail
 RUN set -eux; \
     pip install --upgrade "starlette>=0.49.1"; \
-    pip check
+    echo "---- pip check (expected to fail if something pins starlette) ----"; \
+    pip check || true; \
+    echo "---- packages referencing starlette ----"; \
+    python - <<'PY'
+import pkgutil, sys
+import importlib.metadata as md
 
-# Project deps (keep as-is; prefer pinning via constraints later)
-RUN set -eux; \
-    pip install \
-        psycopg2-binary \
-        redshift-connector \
-        sqlalchemy \
-        alembic \
-        jira \
-        atlassian-python-api \
-        ruff \
-        sqlfluff \
-        autopep8 \
-        apache-airflow-providers-postgres; \
-    pip check
+hits = []
+for dist in md.distributions():
+    name = dist.metadata.get("Name","")
+    reqs = dist.requires or []
+    for r in reqs:
+        if "starlette" in r.lower():
+            hits.append((name, r))
+if not hits:
+    print("No installed distribution declares a dependency on starlette.")
+else:
+    for name, r in sorted(hits):
+        print(f"{name}: {r}")
+PY
+    ; \
+    echo "---- starlette version ----"; \
+    python - <<'PY'
+import starlette
+print(starlette.__version__)
+PY
+    ; \
+    echo "ERROR: pip dependency conflict remains; see output above."; \
+    exit 1
 
 # ============================================================
 # Remove build deps to reduce surface area
