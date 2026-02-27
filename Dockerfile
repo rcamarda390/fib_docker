@@ -47,12 +47,9 @@ RUN set -eux; \
         redshift-connector \
         sqlalchemy \
         alembic \
-        jira \
-        atlassian-python-api \
         ruff \
         sqlfluff \
         autopep8; \
-    pip uninstall -y fastapi starlette || true; \
     pip check
 
 # ============================================================
@@ -78,21 +75,16 @@ RUN set -eux; \
     echo "====================================================="; \
     echo "                 IMAGE VERSION SUMMARY               "; \
     echo "====================================================="; \
-    echo "OS:"; \
     cat /etc/os-release; \
     echo "-----------------------------------------------------"; \
-    echo "Core Libraries:"; \
     dpkg-query -W -f='${Package}\t${Version}\n' \
         libc6 libsqlite3-0 zlib1g openssl libssl3 git 2>/dev/null || true; \
     echo "-----------------------------------------------------"; \
-    echo "Python:"; \
     python -V; \
-    echo "SQLite (python module):"; \
-    python -c "import sqlite3; print(sqlite3.sqlite_version)"; \
+    python -c "import sqlite3; print(\"python sqlite version:\", sqlite3.sqlite_version)"; \
     echo "-----------------------------------------------------"; \
-    echo "Key Python Packages:"; \
-    pip show psycopg2-binary redshift-connector sqlalchemy alembic jira atlassian-python-api ruff sqlfluff autopep8 \
-        | grep -E 'Name:|Version:' || true; \
+    pip show psycopg2-binary redshift-connector sqlalchemy alembic ruff sqlfluff autopep8 \
+        | grep -E "Name:|Version:" || true; \
     echo "====================================================="
 
 RUN mkdir -p /workspaces
