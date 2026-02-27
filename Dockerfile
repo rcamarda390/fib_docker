@@ -5,8 +5,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # ============================================================
 # OS upgrades (base-image CVEs)
-# - Pull patched Debian packages already available in repos
-# - Install runtime tools
+# NOTE: apt-get update refreshes indexes; apt-get upgrade applies patches.
 # ============================================================
 RUN set -eux; \
     apt-get update; \
@@ -56,19 +55,25 @@ ENV PATH="/home/airflow/.local/bin:${PATH}" \
 USER airflow
 
 # ============================================================
-# Highest-signal Python remediations
-# - Upgrade pip tooling
-# - Pin starlette to fixed version (>= 0.49.1)
+# Python remediations
+# - Keep tooling current
+# - Remove FastAPI explicitly (and keep it from forcing old Starlette)
+# - Upgrade Starlette to fixed version
+# - pip check hard-fails on dependency conflicts
 # ============================================================
 RUN set -eux; \
     python -m pip install --upgrade pip setuptools wheel
 
-# If starlette is only a transitive dep, this pin forces the fix.
-# If something requires an older starlette, pip will error (good: forces resolution).
+# Remove FastAPI if it exists (it pins starlette < 0.49.0)
 RUN set -eux; \
-    pip install --upgrade "starlette>=0.49.1"
+    pip uninstall -y fastapi || true
 
-# Your project deps (keep as-is, but prefer pinning via constraints later)
+# Upgrade Starlette to the fixed line (>= 0.49.1)
+RUN set -eux; \
+    pip install --upgrade "starlette>=0.49.1"; \
+    pip check
+
+# Project deps (keep as-is; prefer pinning via constraints later)
 RUN set -eux; \
     pip install \
         psycopg2-binary \
@@ -80,7 +85,8 @@ RUN set -eux; \
         ruff \
         sqlfluff \
         autopep8 \
-        apache-airflow-providers-postgres
+        apache-airflow-providers-postgres; \
+    pip check
 
 # ============================================================
 # Remove build deps to reduce surface area
