@@ -46,53 +46,38 @@ ENV PATH="/home/airflow/.local/bin:${PATH}" \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-# OPTIONAL (recommended): force pip to Artifactory only
-# ENV PIP_INDEX_URL="https://<ARTIFACTORY_HOST>/api/pypi/<REPO>/simple" \
-#     PIP_EXTRA_INDEX_URL="" \
-#     PIP_TRUSTED_HOST="<ARTIFACTORY_HOST>"
-
 USER airflow
 
 # ============================================================
-# Python tooling
+# Python tooling + remediation
+#   - Upgrade pip tooling
+#   - Remove FastAPI if present
+#   - Attempt Starlette upgrade
+#   - Run pip check and print starlette-related requirements
+#   - Fail intentionally so build log shows blockers
 # ============================================================
 RUN set -eux; \
-    python -m pip install --upgrade pip setuptools wheel
-
-# Remove FastAPI if present (pins starlette < 0.49.0)
-RUN set -eux; \
+    python -m pip install --upgrade pip setuptools wheel; \
     pip uninstall -y fastapi || true
 
-# Upgrade Starlette, print blockers, then fail (so the log shows what pins it)
-RUN bash -lc 'set -euo pipefail; \
-  pip install --upgrade "starlette>=0.49.1"; \
-  echo "---- pip check (expected to fail if something pins starlette) ----"; \
-  pip check || true; \
-  echo "---- packages referencing starlette ----"; \
-  python - <<'"'"'PY'"'"'
-import importlib.metadata as md
-hits = []
-for dist in md.distributions():
-    name = dist.metadata.get("Name","")
-    reqs = dist.requires or []
-    for r in reqs:
-        if "starlette" in r.lower():
-            hits.append((name, r))
-if not hits:
-    print("No installed distribution declares a dependency on starlette.")
-else:
-    for name, r in sorted(hits):
-        print(f"{name}: {r}")
-PY
-  echo "---- starlette version ----"; \
-  python - <<'"'"'PY'"'"'
-import starlette
-print(starlette.__version__)
-PY
-  echo "ERROR: pip dependency conflict remains; see output above."; \
-  exit 1'
+RUN set -eux; \
+    pip install --upgrade "starlette>=0.49.1"; \
+    echo "---- pip check (expected to fail if something pins starlette) ----"; \
+    pip check || true; \
+    echo "---- packages referencing starlette ----"; \
+    python -c 'import importlib.metadata as md; hits=[]; \
+for d in md.distributions(): \
+  name=d.metadata.get("Name",""); reqs=d.requires or []; \
+  [hits.append((name,r)) for r in reqs if "starlette" in r.lower()]; \
+print("No installed distribution declares a dependency on starlette.") if not hits else [print(f"{n}: {r}") for n,r in sorted(hits)]'; \
+    echo "---- starlette version ----"; \
+    python -c 'import starlette; print(starlette.__version__)'; \
+    echo "ERROR: pip dependency conflict remains; see output above."; \
+    exit 1
 
+# ============================================================
 # Project deps (install after conflicts are resolved)
+# ============================================================
 RUN set -eux; \
     pip install \
         psycopg2-binary \
