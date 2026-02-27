@@ -49,43 +49,15 @@ ENV PATH="/home/airflow/.local/bin:${PATH}" \
 USER airflow
 
 # ============================================================
-# Python tooling + remediation
-#   - Upgrade pip tooling
-#   - Remove FastAPI if present
+# Python tooling + deps
+#   - Upgrade packaging tooling
+#   - Ensure Starlette is patched
+#   - Remove FastAPI (not needed) and re-check environment
 # ============================================================
 RUN set -eux; \
     python -m pip install --upgrade pip setuptools wheel; \
-    pip uninstall -y fastapi || true
-
-# ============================================================
-# Starlette remediation attempt + diagnostics
-#   - Attempt Starlette upgrade
-#   - Show pip check output + who pins starlette
-#   - Fail intentionally so log shows blockers
-# ============================================================
-RUN set -eux; \
-    pip install --upgrade "starlette>=0.49.1"; \
-    echo "---- pip check (expected to fail if something pins starlette) ----"; \
-    pip check || true; \
-    echo "---- packages referencing starlette ----"; \
-    python -c 'import importlib.metadata as md; \
-hits=[]; \
-[ hits.append((d.metadata.get("Name",""), r)) \
-  for d in md.distributions() \
-  for r in (d.requires or []) \
-  if "starlette" in r.lower() ]; \
-( print("No installed distribution declares a dependency on starlette.") \
-  if not hits else [print(f"{n}: {r}") for n,r in sorted(hits)] )'; \
-    echo "---- starlette version ----"; \
-    python -c 'import starlette; print(starlette.__version__)'; \
-    echo "ERROR: pip dependency conflict remains; see output above."; \
-    exit 1
-
-# ============================================================
-# Project deps (install after conflicts are resolved)
-# ============================================================
-RUN set -eux; \
-    pip install \
+    pip install --upgrade \
+        "starlette>=0.49.1" \
         psycopg2-binary \
         redshift-connector \
         sqlalchemy \
@@ -95,7 +67,9 @@ RUN set -eux; \
         ruff \
         sqlfluff \
         autopep8 \
-        apache-airflow-providers-postgres
+        apache-airflow-providers-postgres; \
+    pip uninstall -y fastapi || true; \
+    pip check
 
 # ============================================================
 # Remove build deps to reduce surface area
