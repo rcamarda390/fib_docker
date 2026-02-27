@@ -27,4 +27,6 @@ jobs:
         with:
           context: .
           push: true
-          tags: rcamarda390/fib_docker:latest
+          tags: |
+            rcamarda390/fib_docker:latest
+            rcamarda390/fib_docker:build-${{ github.run_number }}
