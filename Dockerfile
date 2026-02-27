@@ -1,10 +1,10 @@
-FROM apache/airflow:3.1.7-python3.13
+FROM python:3.13-slim-bookworm
 
 USER root
 ARG DEBIAN_FRONTEND=noninteractive
 
 # ============================================================
-# OS upgrades (base-image CVEs)
+# OS upgrades + minimal tools
 # ============================================================
 RUN set -eux; \
     apt-get update; \
@@ -40,21 +40,22 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# pip behavior and PATH
+# pip behavior
 # ============================================================
-ENV PATH="/home/airflow/.local/bin:${PATH}" \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-USER airflow
+# OPTIONAL (recommended): force pip to Artifactory only
+# ENV PIP_INDEX_URL="https://<ARTIFACTORY_HOST>/api/pypi/<REPO>/simple" \
+#     PIP_EXTRA_INDEX_URL="" \
+#     PIP_TRUSTED_HOST="<ARTIFACTORY_HOST>"
 
 # ============================================================
-# Install deps, remove fastapi, then show pip check blockers
+# Python packages (no airflow, no fastapi)
 # ============================================================
 RUN set -eux; \
     python -m pip install --upgrade pip setuptools wheel; \
-    pip install --upgrade \
-        "starlette>=0.49.1" \
+    pip install \
         psycopg2-binary \
         redshift-connector \
         sqlalchemy \
@@ -63,20 +64,13 @@ RUN set -eux; \
         atlassian-python-api \
         ruff \
         sqlfluff \
-        autopep8 \
-        apache-airflow-providers-postgres; \
-    pip uninstall -y fastapi || true; \
-    echo "---- pip check ----"; \
-    pip check || true; \
-    echo "---- key versions ----"; \
-    pip show apache-airflow fastapi starlette anyio svcs 2>/dev/null || true; \
-    echo "ERROR: pip check failed; see output above."; \
-    exit 1
+        autopep8; \
+    pip uninstall -y fastapi starlette || true; \
+    pip check
 
 # ============================================================
 # Remove build deps to reduce surface area
 # ============================================================
-USER root
 RUN set -eux; \
     apt-get purge -y --auto-remove \
         build-essential \
@@ -90,8 +84,5 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /workspaces \
-    && chown -R airflow: /workspaces
-
-USER airflow
+RUN mkdir -p /workspaces
 WORKDIR /workspaces
