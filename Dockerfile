@@ -53,6 +53,17 @@ ENV PATH="/home/airflow/.local/bin:${PATH}" \
 #     PIP_TRUSTED_HOST="<ARTIFACTORY_HOST>"
 
 USER airflow
+
+# ============================================================
+# Python remediations
+# - Keep tooling current
+# - Remove FastAPI explicitly
+# - Upgrade Starlette
+# - Print exact dependency blockers (if any) and fail
+# ============================================================
+RUN set -eux; \
+    python -m pip install --upgrade pip setuptools wheel
+
 # Remove FastAPI if it exists (it pins starlette < 0.49.0)
 RUN set -eux; \
     pip uninstall -y fastapi || true
@@ -64,7 +75,6 @@ RUN set -eux; \
     pip check || true; \
     echo "---- packages referencing starlette ----"; \
     python - <<'PY'
-import pkgutil, sys
 import importlib.metadata as md
 
 hits = []
@@ -74,6 +84,7 @@ for dist in md.distributions():
     for r in reqs:
         if "starlette" in r.lower():
             hits.append((name, r))
+
 if not hits:
     print("No installed distribution declares a dependency on starlette.")
 else:
@@ -89,6 +100,20 @@ PY
     ; \
     echo "ERROR: pip dependency conflict remains; see output above."; \
     exit 1
+
+# Project deps (kept as-is; we will pin once conflicts are identified)
+RUN set -eux; \
+    pip install \
+        psycopg2-binary \
+        redshift-connector \
+        sqlalchemy \
+        alembic \
+        jira \
+        atlassian-python-api \
+        ruff \
+        sqlfluff \
+        autopep8 \
+        apache-airflow-providers-postgres
 
 # ============================================================
 # Remove build deps to reduce surface area
