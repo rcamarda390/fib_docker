@@ -5,7 +5,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # ============================================================
 # OS upgrades (base-image CVEs)
-# NOTE: apt-get update refreshes indexes; apt-get upgrade applies patches.
 # ============================================================
 RUN set -eux; \
     apt-get update; \
@@ -55,28 +54,23 @@ ENV PATH="/home/airflow/.local/bin:${PATH}" \
 USER airflow
 
 # ============================================================
-# Python remediations
-# - Keep tooling current
-# - Remove FastAPI explicitly
-# - Upgrade Starlette
-# - Print exact dependency blockers (if any) and fail
+# Python tooling
 # ============================================================
 RUN set -eux; \
     python -m pip install --upgrade pip setuptools wheel
 
-# Remove FastAPI if it exists (it pins starlette < 0.49.0)
+# Remove FastAPI if present (pins starlette < 0.49.0)
 RUN set -eux; \
     pip uninstall -y fastapi || true
 
-# Upgrade Starlette, then print the exact dependency conflict and fail
-RUN set -eux; \
-    pip install --upgrade "starlette>=0.49.1"; \
-    echo "---- pip check (expected to fail if something pins starlette) ----"; \
-    pip check || true; \
-    echo "---- packages referencing starlette ----"; \
-    python - <<'PY'
+# Upgrade Starlette, print blockers, then fail (so the log shows what pins it)
+RUN bash -lc 'set -euo pipefail; \
+  pip install --upgrade "starlette>=0.49.1"; \
+  echo "---- pip check (expected to fail if something pins starlette) ----"; \
+  pip check || true; \
+  echo "---- packages referencing starlette ----"; \
+  python - <<'"'"'PY'"'"'
 import importlib.metadata as md
-
 hits = []
 for dist in md.distributions():
     name = dist.metadata.get("Name","")
@@ -84,24 +78,21 @@ for dist in md.distributions():
     for r in reqs:
         if "starlette" in r.lower():
             hits.append((name, r))
-
 if not hits:
     print("No installed distribution declares a dependency on starlette.")
 else:
     for name, r in sorted(hits):
         print(f"{name}: {r}")
 PY
-    ; \
-    echo "---- starlette version ----"; \
-    python - <<'PY'
+  echo "---- starlette version ----"; \
+  python - <<'"'"'PY'"'"'
 import starlette
 print(starlette.__version__)
 PY
-    ; \
-    echo "ERROR: pip dependency conflict remains; see output above."; \
-    exit 1
+  echo "ERROR: pip dependency conflict remains; see output above."; \
+  exit 1'
 
-# Project deps (kept as-is; we will pin once conflicts are identified)
+# Project deps (install after conflicts are resolved)
 RUN set -eux; \
     pip install \
         psycopg2-binary \
