@@ -49,10 +49,7 @@ ENV PATH="/home/airflow/.local/bin:${PATH}" \
 USER airflow
 
 # ============================================================
-# Python tooling + deps
-#   - Upgrade packaging tooling
-#   - Ensure Starlette is patched
-#   - Remove FastAPI (not needed) and re-check environment
+# Install deps, remove fastapi, then show pip check blockers
 # ============================================================
 RUN set -eux; \
     python -m pip install --upgrade pip setuptools wheel; \
@@ -69,7 +66,12 @@ RUN set -eux; \
         autopep8 \
         apache-airflow-providers-postgres; \
     pip uninstall -y fastapi || true; \
-    pip check
+    echo "---- pip check ----"; \
+    pip check || true; \
+    echo "---- key versions ----"; \
+    pip show apache-airflow fastapi starlette anyio svcs 2>/dev/null || true; \
+    echo "ERROR: pip check failed; see output above."; \
+    exit 1
 
 # ============================================================
 # Remove build deps to reduce surface area
