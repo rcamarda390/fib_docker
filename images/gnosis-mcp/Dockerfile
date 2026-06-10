@@ -70,7 +70,7 @@ RUN set -e; \
     PYPATH=$(python3 -c \
       "import sys; print(f'/install/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages')") \
     && echo "Using PYTHONPATH=${PYPATH}" \
-    && PYTHONPATH=${PYPATH} python3 -c " \
+    && PYTHONPATH=${PYPATH} python3 -c "\
 from huggingface_hub import snapshot_download; \
 print('Pre-downloading ${EMBED_MODEL} ...', flush=True); \
 path = snapshot_download( \
