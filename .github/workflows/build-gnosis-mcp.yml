@@ -6,7 +6,7 @@ on:
       gnosis_version:
         description: "gnosis-mcp PyPI version"
         required: true
-        default: "0.13.3"
+        default: "0.13.3-v2"
       embed_model:
         description: "HuggingFace model to pre-bundle"
         required: true
