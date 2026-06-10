@@ -14,7 +14,7 @@ on:
       image_tag:
         description: "Docker image tag"
         required: true
-        default: "0.13.3-airgap"
+        default: "0.13.3-airgap-v2"
 
   push:
     paths:
@@ -41,7 +41,7 @@ jobs:
       - name: Resolve build args
         id: args
         run: |
-          echo "tag=${{ github.event.inputs.image_tag || '0.13.3-airgap' }}"         >> $GITHUB_OUTPUT
+          echo "tag=${{ github.event.inputs.image_tag || '0.13.3-airgap-v2' }}"         >> $GITHUB_OUTPUT
           echo "version=${{ github.event.inputs.gnosis_version || '0.13.3' }}"       >> $GITHUB_OUTPUT
           echo "model=${{ github.event.inputs.embed_model || 'MongoDB/mdbr-leaf-ir' }}" >> $GITHUB_OUTPUT
           echo "image=${{ secrets.DOCKERHUB_USERNAME }}/gnosis-mcp:${{ github.event.inputs.image_tag || '0.13.3-airgap' }}" >> $GITHUB_OUTPUT
