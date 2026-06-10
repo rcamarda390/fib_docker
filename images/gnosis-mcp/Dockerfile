@@ -1,14 +1,16 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v2)
+# gnosis-mcp — air-gap variant (v3)
 # =============================================================================
-# Model pre-warm strategy:
-#   gnosis-mcp's local_embed.py uses its OWN download code (urllib direct)
-#   controlled by XDG_DATA_HOME — it does NOT use HuggingFace Hub cache.
-#   We trigger gnosis-mcp's own ingest --embed during the build stage so it
-#   downloads the model to XDG_DATA_HOME=/gnosis-model-cache. That directory
-#   is copied to runtime and XDG_DATA_HOME is kept set, so the model is found
-#   without any network access at runtime.
+# local_embed.py downloads exactly three files from HuggingFace via stdlib
+# urllib. Cache path: XDG_DATA_HOME / safe_name where safe_name is
+# model_id.replace("/", "--"). We download those files directly with curl
+# during build — no huggingface_hub, no warmup ingest needed.
+#
+# Files downloaded:
+#   tokenizer.json
+#   tokenizer_config.json
+#   onnx/model_quantized.onnx  (falls back to onnx/model.onnx)
 # =============================================================================
 
 ARG PYTHON_VERSION=3.12
@@ -23,7 +25,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
+    && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -32,28 +34,26 @@ ARG GNOSIS_VERSION=0.13.3
 ARG EXTRAS="embeddings"
 RUN pip install --prefix=/install "gnosis-mcp[${EXTRAS}]==${GNOSIS_VERSION}"
 
-# Pre-warm gnosis-mcp's own model cache by running a real ingest --embed.
-# XDG_DATA_HOME controls where local_embed.py stores the ONNX model files.
-# Builder has internet — model downloads here, never at runtime.
+# Download exactly the files local_embed.py needs.
+# safe_name = model_id.replace("/", "--") = MongoDB--mdbr-leaf-ir
+# Tries model_quantized.onnx first, falls back to model.onnx (mirrors _ONNX_CANDIDATES).
+ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
 ENV XDG_DATA_HOME=/gnosis-model-cache
 
 RUN set -e; \
-    PYPATH=$(python3 -c "import sys; print(f'/install/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages')"); \
-    mkdir -p /tmp/warmup-docs; \
-    echo '# Warmup' > /tmp/warmup-docs/warmup.md; \
-    PYTHONPATH=$PYPATH \
-    XDG_DATA_HOME=/gnosis-model-cache \
-    GNOSIS_MCP_DATABASE_URL=sqlite:////tmp/warmup.db \
-    GNOSIS_MCP_EMBED_PROVIDER=local \
-    /install/bin/gnosis-mcp init-db; \
-    PYTHONPATH=$PYPATH \
-    XDG_DATA_HOME=/gnosis-model-cache \
-    GNOSIS_MCP_DATABASE_URL=sqlite:////tmp/warmup.db \
-    GNOSIS_MCP_EMBED_PROVIDER=local \
-    /install/bin/gnosis-mcp ingest /tmp/warmup-docs --embed; \
-    echo "Model cache contents:"; \
-    find /gnosis-model-cache -type f; \
-    rm -rf /tmp/warmup-docs /tmp/warmup.db
+    BASE="https://huggingface.co/${EMBED_MODEL}/resolve/main"; \
+    DIR="/gnosis-model-cache/MongoDB--mdbr-leaf-ir"; \
+    mkdir -p "${DIR}/onnx"; \
+    curl -fsSL "${BASE}/tokenizer.json"        -o "${DIR}/tokenizer.json"; \
+    curl -fsSL "${BASE}/tokenizer_config.json" -o "${DIR}/tokenizer_config.json"; \
+    if curl -fsSL "${BASE}/onnx/model_quantized.onnx" -o "${DIR}/onnx/model_quantized.onnx"; then \
+        echo "Downloaded model_quantized.onnx"; \
+    else \
+        curl -fsSL "${BASE}/onnx/model.onnx" -o "${DIR}/onnx/model.onnx"; \
+        echo "Downloaded model.onnx (fallback)"; \
+    fi; \
+    echo "Model cache:"; \
+    find /gnosis-model-cache -type f -ls
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
@@ -61,9 +61,7 @@ RUN set -e; \
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        libgomp1 \
-        curl \
+    && apt-get install -y --no-install-recommends libgomp1 curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis
 
