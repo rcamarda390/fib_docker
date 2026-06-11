@@ -42,7 +42,7 @@ ENV XDG_DATA_HOME=/gnosis-model-cache
 
 RUN set -e; \
     BASE="https://huggingface.co/${EMBED_MODEL}/resolve/main"; \
-    DIR="/gnosis-model-cache/MongoDB--mdbr-leaf-ir"; \
+    DIR="/gnosis-model-cache/gnosis-mcp/models/MongoDB--mdbr-leaf-ir"; \
     mkdir -p "${DIR}/onnx"; \
     curl -fsSL "${BASE}/tokenizer.json"        -o "${DIR}/tokenizer.json"; \
     curl -fsSL "${BASE}/tokenizer_config.json" -o "${DIR}/tokenizer_config.json"; \
@@ -79,7 +79,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XDG_DATA_HOME=/gnosis-model-cache
 
 RUN mkdir -p /data /docs \
-    && chown -R gnosis:gnosis /data /home/gnosis
+    && chown -R gnosis:gnosis /data /home/gnosis /gnosis-model-cache
 
 USER gnosis
 WORKDIR /home/gnosis
