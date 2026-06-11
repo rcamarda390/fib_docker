@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v7)
+# gnosis-mcp — air-gap variant (v8)
 # =============================================================================
 # Patch: gnosis-mcp 0.13.3 rest.py does not wire session_manager.run() into
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
@@ -99,7 +99,7 @@ LABEL org.opencontainers.image.title="gnosis-mcp-airgap" \
       gnosis.embed-model="MongoDB/mdbr-leaf-ir" \
       gnosis.gnosis-version="0.13.3" \
       gnosis.patch="rest.py-combined-lifespan" \
-      gnosis.image-version="v7"
+      gnosis.image-version="v8"
 
 ENTRYPOINT ["gnosis-mcp"]
 CMD ["serve", "--transport", "streamable-http", "--rest"]
