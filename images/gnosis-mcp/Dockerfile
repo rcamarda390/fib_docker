@@ -1,19 +1,11 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v4 → v5)
+# gnosis-mcp — air-gap variant (v6)
 # =============================================================================
-# local_embed.py downloads exactly three files from HuggingFace via stdlib
-# urllib. Cache path: XDG_DATA_HOME / safe_name where safe_name is
-# model_id.replace("/", "--"). We download those files directly with curl
-# during build — no huggingface_hub, no warmup ingest needed.
-#
-# Files downloaded:
-#   tokenizer.json
-#   tokenizer_config.json
-#   onnx/model_quantized.onnx  (falls back to onnx/model.onnx)
-#
-# FIX (v5): pin mcp SDK to 1.26.0 — gnosis-mcp 0.13.3 is incompatible with
-# mcp>=1.27.0 (StreamableHTTP lifespan not wired, causes 500 on /mcp).
+# Patch: gnosis-mcp 0.13.3 rest.py does not wire session_manager.run() into
+# the Starlette lifespan when mounting StreamableHTTP alongside REST API.
+# This causes RuntimeError: Task group is not initialized on every /mcp request.
+# Fix: inject a combined lifespan that runs both REST backend AND session_manager.
 # =============================================================================
 
 ARG PYTHON_VERSION=3.12
@@ -37,14 +29,35 @@ ARG GNOSIS_VERSION=0.13.3
 ARG EXTRAS="embeddings"
 RUN pip install --prefix=/install "gnosis-mcp[${EXTRAS}]==${GNOSIS_VERSION}"
 
-# Pin mcp SDK — gnosis-mcp 0.13.3 breaks with mcp>=1.27.0 (task group
-# lifespan not initialized in StreamableHTTP mount). 1.26.0 is the last
-# known-good version.
-RUN pip install --prefix=/install "mcp==1.26.0"
+# Patch rest.py — replace the single-lifespan Starlette construction with a
+# combined lifespan that also runs session_manager for StreamableHTTP.
+RUN python3 - << 'PYEOF'
+import pathlib
+
+path = pathlib.Path("/install/lib/python3.12/site-packages/gnosis_mcp/rest.py")
+src = path.read_text()
+
+old = '    app = Starlette(routes=routes, lifespan=_make_lifespan(config))'
+new = (
+    '    import contextlib as _contextlib\n'
+    '    _rest_lifespan = _make_lifespan(config)\n'
+    '    @_contextlib.asynccontextmanager\n'
+    '    async def _combined_lifespan(app):\n'
+    '        async with _contextlib.AsyncExitStack() as _stack:\n'
+    '            await _stack.enter_async_context(_rest_lifespan(app))\n'
+    '            if transport != "sse":\n'
+    '                await _stack.enter_async_context(mcp_server.session_manager.run())\n'
+    '            yield\n'
+    '    app = Starlette(routes=routes, lifespan=_combined_lifespan)'
+)
+
+assert old in src, "PATCH FAILED: target line not found in rest.py"
+patched = src.replace(old, new, 1)
+path.write_text(patched)
+print("rest.py patched successfully")
+PYEOF
 
 # Download exactly the files local_embed.py needs.
-# safe_name = model_id.replace("/", "--") = MongoDB--mdbr-leaf-ir
-# Tries model_quantized.onnx first, falls back to model.onnx (mirrors _ONNX_CANDIDATES).
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
 ENV XDG_DATA_HOME=/gnosis-model-cache
 
@@ -108,7 +121,7 @@ LABEL org.opencontainers.image.title="gnosis-mcp-airgap" \
       gnosis.airgap="true" \
       gnosis.embed-model="MongoDB/mdbr-leaf-ir" \
       gnosis.gnosis-version="0.13.3" \
-      gnosis.mcp-sdk-pin="1.26.0"
+      gnosis.patch="rest.py-combined-lifespan"
 
 ENTRYPOINT ["gnosis-mcp"]
 CMD ["serve", "--transport", "streamable-http", "--rest"]
