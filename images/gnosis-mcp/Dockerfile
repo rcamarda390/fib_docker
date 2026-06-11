@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v3)
+# gnosis-mcp — air-gap variant (v4 → v5)
 # =============================================================================
 # local_embed.py downloads exactly three files from HuggingFace via stdlib
 # urllib. Cache path: XDG_DATA_HOME / safe_name where safe_name is
@@ -11,6 +11,9 @@
 #   tokenizer.json
 #   tokenizer_config.json
 #   onnx/model_quantized.onnx  (falls back to onnx/model.onnx)
+#
+# FIX (v5): pin mcp SDK to 1.26.0 — gnosis-mcp 0.13.3 is incompatible with
+# mcp>=1.27.0 (StreamableHTTP lifespan not wired, causes 500 on /mcp).
 # =============================================================================
 
 ARG PYTHON_VERSION=3.12
@@ -33,6 +36,11 @@ WORKDIR /build
 ARG GNOSIS_VERSION=0.13.3
 ARG EXTRAS="embeddings"
 RUN pip install --prefix=/install "gnosis-mcp[${EXTRAS}]==${GNOSIS_VERSION}"
+
+# Pin mcp SDK — gnosis-mcp 0.13.3 breaks with mcp>=1.27.0 (task group
+# lifespan not initialized in StreamableHTTP mount). 1.26.0 is the last
+# known-good version.
+RUN pip install --prefix=/install "mcp==1.26.0"
 
 # Download exactly the files local_embed.py needs.
 # safe_name = model_id.replace("/", "--") = MongoDB--mdbr-leaf-ir
@@ -99,7 +107,8 @@ LABEL org.opencontainers.image.title="gnosis-mcp-airgap" \
       org.opencontainers.image.licenses="MIT" \
       gnosis.airgap="true" \
       gnosis.embed-model="MongoDB/mdbr-leaf-ir" \
-      gnosis.gnosis-version="0.13.3"
+      gnosis.gnosis-version="0.13.3" \
+      gnosis.mcp-sdk-pin="1.26.0"
 
 ENTRYPOINT ["gnosis-mcp"]
 CMD ["serve", "--transport", "streamable-http", "--rest"]
