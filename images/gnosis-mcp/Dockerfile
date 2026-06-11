@@ -44,12 +44,15 @@ RUN set -e; \
     BASE="https://huggingface.co/${EMBED_MODEL}/resolve/main"; \
     DIR="/gnosis-model-cache/gnosis-mcp/models/MongoDB--mdbr-leaf-ir"; \
     mkdir -p "${DIR}/onnx"; \
-    curl -fsSL "${BASE}/tokenizer.json"        -o "${DIR}/tokenizer.json"; \
-    curl -fsSL "${BASE}/tokenizer_config.json" -o "${DIR}/tokenizer_config.json"; \
+    curl -fsSL "${BASE}/tokenizer.json"           -o "${DIR}/tokenizer.json"; \
+    curl -fsSL "${BASE}/tokenizer_config.json"    -o "${DIR}/tokenizer_config.json"; \
+    curl -fsSL "${BASE}/special_tokens_map.json"  -o "${DIR}/special_tokens_map.json"; \
     if curl -fsSL "${BASE}/onnx/model_quantized.onnx" -o "${DIR}/onnx/model_quantized.onnx"; then \
         echo "Downloaded model_quantized.onnx"; \
+        curl -fsSL "${BASE}/onnx/model_quantized.onnx_data" -o "${DIR}/onnx/model_quantized.onnx_data" 2>/dev/null || echo "No onnx_data sidecar (ok)"; \
     else \
         curl -fsSL "${BASE}/onnx/model.onnx" -o "${DIR}/onnx/model.onnx"; \
+        curl -fsSL "${BASE}/onnx/model.onnx_data" -o "${DIR}/onnx/model.onnx_data" 2>/dev/null || echo "No onnx_data sidecar (ok)"; \
         echo "Downloaded model.onnx (fallback)"; \
     fi; \
     echo "Model cache:"; \
