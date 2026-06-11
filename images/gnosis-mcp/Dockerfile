@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v6)
+# gnosis-mcp — air-gap variant (v7)
 # =============================================================================
 # Patch: gnosis-mcp 0.13.3 rest.py does not wire session_manager.run() into
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
@@ -31,31 +31,8 @@ RUN pip install --prefix=/install "gnosis-mcp[${EXTRAS}]==${GNOSIS_VERSION}"
 
 # Patch rest.py — replace the single-lifespan Starlette construction with a
 # combined lifespan that also runs session_manager for StreamableHTTP.
-RUN python3 - << 'PYEOF'
-import pathlib
-
-path = pathlib.Path("/install/lib/python3.12/site-packages/gnosis_mcp/rest.py")
-src = path.read_text()
-
-old = '    app = Starlette(routes=routes, lifespan=_make_lifespan(config))'
-new = (
-    '    import contextlib as _contextlib\n'
-    '    _rest_lifespan = _make_lifespan(config)\n'
-    '    @_contextlib.asynccontextmanager\n'
-    '    async def _combined_lifespan(app):\n'
-    '        async with _contextlib.AsyncExitStack() as _stack:\n'
-    '            await _stack.enter_async_context(_rest_lifespan(app))\n'
-    '            if transport != "sse":\n'
-    '                await _stack.enter_async_context(mcp_server.session_manager.run())\n'
-    '            yield\n'
-    '    app = Starlette(routes=routes, lifespan=_combined_lifespan)'
-)
-
-assert old in src, "PATCH FAILED: target line not found in rest.py"
-patched = src.replace(old, new, 1)
-path.write_text(patched)
-print("rest.py patched successfully")
-PYEOF
+COPY patch_rest.py /build/patch_rest.py
+RUN python3 /build/patch_rest.py
 
 # Download exactly the files local_embed.py needs.
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
@@ -121,7 +98,8 @@ LABEL org.opencontainers.image.title="gnosis-mcp-airgap" \
       gnosis.airgap="true" \
       gnosis.embed-model="MongoDB/mdbr-leaf-ir" \
       gnosis.gnosis-version="0.13.3" \
-      gnosis.patch="rest.py-combined-lifespan"
+      gnosis.patch="rest.py-combined-lifespan" \
+      gnosis.image-version="v7"
 
 ENTRYPOINT ["gnosis-mcp"]
 CMD ["serve", "--transport", "streamable-http", "--rest"]
