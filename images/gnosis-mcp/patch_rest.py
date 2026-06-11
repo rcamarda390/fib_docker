@@ -10,10 +10,10 @@ new = (
     '    @_contextlib.asynccontextmanager\n'
     '    async def _combined_lifespan(app):\n'
     '        async with _contextlib.AsyncExitStack() as _stack:\n'
-    '            await _stack.enter_async_context(_rest_lifespan(app))\n'
+    '            _state = await _stack.enter_async_context(_rest_lifespan(app))\n'
     '            if transport != "sse":\n'
     '                await _stack.enter_async_context(mcp_server.session_manager.run())\n'
-    '            yield\n'
+    '            yield _state\n'
     '    app = Starlette(routes=routes, lifespan=_combined_lifespan)'
 )
 
