@@ -7,7 +7,6 @@ on:
     paths:
       - 'images/agentmemory-mcp/Dockerfile.iii-engine'
       - 'images/agentmemory-mcp/iii-config.yaml'
-      - 'images/agentmemory-mcp/docker-compose.yml'
       - '.github/workflows/build-iii-engine.yml'
   workflow_dispatch:
     inputs:
@@ -30,6 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - id: meta
         shell: bash

@@ -60,7 +60,7 @@ Builds agentmemory independently.
 - **Trigger:** Manual dispatch only (`workflow_dispatch`)
 - **Inputs:** `version` (leave blank to reuse the tracked package version) and optional `image_version` override
 - **Duration:** ~10-15 minutes (includes HuggingFace model caching)
-- **Output:** `docker.io/rcamarda390/agentmemory:<version>` and `:latest`
+- **Output:** `docker.io/rcamarda390/agentmemory:<version>-build-<image-version>`, plus `:<version>` and `:latest` aliases
 
 ### 3. `build-agentmemory-mcp-all.yml`
 
