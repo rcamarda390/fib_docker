@@ -16,7 +16,7 @@ on:
       agentmemory_version:
         description: agentmemory npm version to build
         required: false
-        default: 0.9.26
+        default: 0.9.28
 
 permissions:
   contents: read

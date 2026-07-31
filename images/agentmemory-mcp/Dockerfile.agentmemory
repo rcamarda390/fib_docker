@@ -1,5 +1,5 @@
 FROM node:22-bookworm-slim AS npm-install
-ARG AGENTMEMORY_VERSION=0.9.26
+ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v1
 ARG NPM_CONFIG_STRICT_SSL=true
 ARG NODE_TLS_REJECT_UNAUTHORIZED=1
@@ -14,7 +14,7 @@ COPY cache-models.js /opt/agentmemory/cache-models.js
 RUN node /opt/agentmemory/cache-models.js
 
 FROM node:22-bookworm-slim AS production
-ARG AGENTMEMORY_VERSION=0.9.26
+ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v1
 LABEL org.opencontainers.image.title="agentmemory" \
       org.opencontainers.image.description="Pinned agentmemory ${AGENTMEMORY_VERSION} image for air-gapped deployments" \
