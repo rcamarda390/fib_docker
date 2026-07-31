@@ -1,33 +1,97 @@
 name: build-agentmemory
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'images/agentmemory-mcp/Dockerfile.agentmemory'
+      - 'images/agentmemory-mcp/cache-models.js'
+      - 'images/agentmemory-mcp/docker-entrypoint.sh'
+      - '.github/workflows/build-agentmemory.yml'
   workflow_dispatch:
     inputs:
       version:
         description: "agentmemory version to build (leave blank to use latest published npm version)"
         required: false
         default: ''
+      image_version:
+        description: Optional agentmemory image revision override (leave blank to auto-bump)
+        required: false
+        default: ''
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
   build:
+    if: ${{ github.event_name != 'push' || github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - id: meta
         shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version || '' }}
+          INPUT_IMAGE_VERSION: ${{ github.event.inputs.image_version || '' }}
         run: |
+          next_image_version() {
+            case "$1" in
+              v[0-9]*) echo "v$(( ${1#v} + 1 ))" ;;
+              '') echo 'v1' ;;
+              *)
+                echo "Unsupported image version format: $1" >&2
+                exit 1
+                ;;
+            esac
+          }
+
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-          if [ -z "${{ inputs.version }}" ]; then
-            VERSION=$(npm view @agentmemory/agentmemory version 2>/dev/null || echo "0.9.26")
+
+          CURRENT_VERSION=$(grep -E '^ARG AGENTMEMORY_VERSION=' images/agentmemory-mcp/Dockerfile.agentmemory | head -1 | cut -d'=' -f2)
+          CURRENT_IMAGE_VERSION=$(grep -E '^ARG AGENTMEMORY_IMAGE_VERSION=' images/agentmemory-mcp/Dockerfile.agentmemory | head -1 | cut -d'=' -f2)
+
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
           else
-            VERSION="${{ inputs.version }}"
+            VERSION=$(npm view @agentmemory/agentmemory version 2>/dev/null || echo "$CURRENT_VERSION")
           fi
+
+          if [ -n "$INPUT_IMAGE_VERSION" ]; then
+            IMAGE_VERSION="$INPUT_IMAGE_VERSION"
+          elif [ "$VERSION" = "$CURRENT_VERSION" ]; then
+            IMAGE_VERSION=$(next_image_version "$CURRENT_IMAGE_VERSION")
+          else
+            IMAGE_VERSION='v1'
+          fi
+
+          IMAGE_TAG="${VERSION}-build-${IMAGE_VERSION}"
+
+          sed -i "s/^ARG AGENTMEMORY_VERSION=.*/ARG AGENTMEMORY_VERSION=${VERSION}/" images/agentmemory-mcp/Dockerfile.agentmemory
+          sed -i "s/^ARG AGENTMEMORY_IMAGE_VERSION=.*/ARG AGENTMEMORY_IMAGE_VERSION=${IMAGE_VERSION}/" images/agentmemory-mcp/Dockerfile.agentmemory
+          sed -i -E "/^\s*image:.*\/agentmemory:/ s#(agentmemory:)[^[:space:]]+#\\1${IMAGE_TAG}#" images/agentmemory-mcp/docker-compose.yml
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image_version=${IMAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Persist tracked versions
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add images/agentmemory-mcp/Dockerfile.agentmemory images/agentmemory-mcp/docker-compose.yml
+          if git diff --cached --quiet; then
+            echo 'No tracked version changes to commit.'
+            exit 0
+          fi
+          git commit -m "chore: bump agentmemory image to ${{ steps.meta.outputs.image_tag }}"
+          git push
 
       - uses: docker/setup-buildx-action@v3
 
@@ -45,22 +109,24 @@ jobs:
           provenance: false
           build-args: |
             AGENTMEMORY_VERSION=${{ steps.meta.outputs.version }}
+            AGENTMEMORY_IMAGE_VERSION=${{ steps.meta.outputs.image_version }}
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.image_tag }}
             ${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:latest
 
       - name: Smoke test
         run: |
-          docker pull docker.io/${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.version }}
+          docker pull docker.io/${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.image_tag }}
           docker run --rm \
             -e III_ENGINE_URL=ws://localhost:49134 \
             -e TRANSFORMERS_OFFLINE=1 \
             -e HF_HUB_OFFLINE=1 \
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.version }} \
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.image_tag }} \
             node -e "console.log('agentmemory image OK')"
 
       - name: Summary
         run: |
           echo "## Build complete" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`docker.io/${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`docker.io/${{ secrets.DOCKERHUB_USERNAME }}/agentmemory:${{ steps.meta.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Package version:** \`${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image version:** \`${{ steps.meta.outputs.image_version }}\`" >> $GITHUB_STEP_SUMMARY
