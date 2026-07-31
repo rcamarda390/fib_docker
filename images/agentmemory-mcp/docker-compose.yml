@@ -8,7 +8,7 @@ services:
     restart: "no"
 
   iii-engine:
-    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/iii-engine:0.22.0-airgap-v3
+    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/iii-engine:0.22.0-airgap-v4
     depends_on:
       iii-data-init:
         condition: service_completed_successfully
@@ -32,7 +32,7 @@ services:
       iii-engine:
         condition: service_healthy
     environment:
-      III_ENGINE_URL: ws://iii-engine:0.22.0-airgap-v3
+      III_ENGINE_URL: ws://iii-engine:0.22.0-airgap-v4
       TRANSFORMERS_OFFLINE: "1"
       HF_HUB_OFFLINE: "1"
     volumes:
@@ -40,7 +40,7 @@ services:
     ports:
       - "3113:3113"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://iii-engine:0.22.0-airgap-v3 || true"]
+      test: ["CMD-SHELL", "curl -f http://iii-engine:0.22.0-airgap-v4 || true"]
       interval: 15s
       timeout: 5s
       retries: 6
