@@ -22,7 +22,7 @@ Two complementary Docker images:
 
 ```
 GitHub Actions (build) 
-    ↓ (GHCR push)
+    ↓ (Docker Hub push)
 Staging Environment (pull + vet)
     ↓ (Artifactory scan)
 Artifactory Registry (approved)
@@ -30,14 +30,16 @@ Artifactory Registry (approved)
 Air-Gapped EC2 (docker compose up)
 ```
 
-## Image Names (GHCR)
+## Image Names (Docker Hub)
 
-- `ghcr.io/rcamarda390/iii-engine:0.11.2`
-- `ghcr.io/rcamarda390/agentmemory:0.9.26` (and `:latest`)
+- `docker.io/rcamarda390/iii-engine:0.11.2` (Docker Hub)
+- `docker.io/rcamarda390/agentmemory:0.9.26` (Docker Hub, also `:latest`)
 
-Images pull through Artifactory's remote proxy:
+Images are cached through Artifactory's remote proxy:
 - `artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.11.2`
 - `artifactory.foobar.com/docker-remote/rcamarda390/agentmemory:0.9.26`
+
+Pull from Docker Hub directly or through Artifactory (auto-cached on first pull).
 
 ## Workflows
 
@@ -49,7 +51,7 @@ Builds iii-engine independently.
 
 - **Trigger:** Push to `main` when `Dockerfile.iii-engine` or `iii-config.yaml` changes, or manual dispatch
 - **Duration:** ~3 minutes
-- **Output:** `ghcr.io/rcamarda390/iii-engine:0.11.2`
+- **Output:** `docker.io/rcamarda390/iii-engine:0.11.2`
 
 ### 2. `build-agentmemory.yml`
 
@@ -58,7 +60,7 @@ Builds agentmemory independently.
 - **Trigger:** Manual dispatch only (`workflow_dispatch`)
 - **Input:** `version` (default: `0.9.26`) — any npm version
 - **Duration:** ~10-15 minutes (includes HuggingFace model caching)
-- **Output:** `ghcr.io/rcamarda390/agentmemory:<version>` and `:latest`
+- **Output:** `docker.io/rcamarda390/agentmemory:<version>` and `:latest`
 
 ### 3. `build-agentmemory-mcp-all.yml`
 
@@ -78,21 +80,21 @@ Orchestrator — builds iii-engine and/or agentmemory together.
 
 **GitHub** → **Actions** → **build-iii-engine** → **Run workflow** (or auto-triggers on push)
 
-Build output: `ghcr.io/rcamarda390/iii-engine:0.11.2`
+Build output: `docker.io/rcamarda390/iii-engine:0.11.2`
 
 ### 2. Trigger agentmemory Build
 
 **GitHub** → **Actions** → **build-agentmemory** → **Run workflow**
 
-Set version (default `0.9.26`). Build output: `ghcr.io/rcamarda390/agentmemory:0.9.26` + `:latest`
+Set version (default `0.9.26`). Build output: `docker.io/rcamarda390/agentmemory:0.9.26` + `:latest`
 
 ### 3. Pull & Vet in Staging
 
 On a machine with internet access:
 
 ```bash
-docker pull ghcr.io/rcamarda390/iii-engine:0.11.2
-docker pull ghcr.io/rcamarda390/agentmemory:0.9.26
+docker pull docker.io/rcamarda390/iii-engine:0.11.2
+docker pull docker.io/rcamarda390/agentmemory:0.9.26
 
 # Run docker compose to test
 docker compose up -d

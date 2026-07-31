@@ -60,6 +60,39 @@ environment:
   DISABLE_MODEL_CHECKS: "true"
 ```
 
+## Docker Hub Push Details
+
+All images are pushed to Docker Hub (not GHCR) to integrate with Artifactory's remote proxy caching.
+
+### Workflow Secrets Required
+
+Both workflows need:
+- `DOCKERHUB_USERNAME` — Docker Hub username
+- `DOCKERHUB_TOKEN` — Docker Hub personal access token
+
+Configure in: **Repository Settings** → **Secrets and variables** → **Actions**
+
+Token scope: `read:packages`, `write:packages`
+
+### Updating Docker Hub Image Names
+
+If you change the repository owner or namespace, update these files:
+- `.github/workflows/build-iii-engine.yml` → line 56
+- `.github/workflows/build-agentmemory.yml` → lines 44-45
+- `.github/workflows/build-agentmemory-mcp-all.yml` → lines 62, 95-96
+
+Replace `${{ secrets.DOCKERHUB_USERNAME }}` with hardcoded username if needed, or update the secret name to match your setup.
+
+### Image Availability Timeline
+
+| Step | Time | Details |
+|------|------|---------|
+| Build completes | Immediate | Image available at `docker.io/rcamarda390/...` |
+| First Artifactory pull | 30-60s | Artifactory remote proxy fetches from Docker Hub |
+| Cached in Artifactory | 5-10min | Subsequent pulls are instant |
+
+After build completes, you can pull from Artifactory. First pull may take a moment as Artifactory caches it.
+
 ## Upstream Contributions
 
 ### To rohitg00/agentmemory
