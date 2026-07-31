@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v8)
+# gnosis-mcp — air-gap variant (v9)
 # =============================================================================
 # Patch: gnosis-mcp 0.13.3 rest.py does not wire session_manager.run() into
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
+# Security: Python bumped to 3.13 (CVE-2026-6100); apt-get upgrade applied in
+# both stages to patch perl-base (CVE-2026-42496 +4), libc-bin (CVE-2026-5450),
+# curl (CVE-2026-8927/8926/9079), and libcurl4t64 (CVE-2026-11856/8924/10536).
 # =============================================================================
 
-ARG PYTHON_VERSION=3.12
+ARG PYTHON_VERSION=3.13
 
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
@@ -20,6 +23,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -62,6 +66,7 @@ RUN set -e; \
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends libgomp1 curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis
@@ -99,7 +104,7 @@ LABEL org.opencontainers.image.title="gnosis-mcp-airgap" \
       gnosis.embed-model="MongoDB/mdbr-leaf-ir" \
       gnosis.gnosis-version="0.13.3" \
       gnosis.patch="rest.py-combined-lifespan" \
-      gnosis.image-version="v8"
+      gnosis.image-version="v9"
 
 ENTRYPOINT ["gnosis-mcp"]
 CMD ["serve", "--transport", "streamable-http", "--rest"]
