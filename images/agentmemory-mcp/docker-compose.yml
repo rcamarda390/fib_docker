@@ -8,7 +8,7 @@ services:
     restart: "no"
 
   iii-engine:
-    image: ${ARTIFACTORY_REGISTRY:-ghcr.io/rcamarda390}/iii-engine:0.11.2
+    image: ${ARTIFACTORY_REGISTRY:-ghcr.io/rcamarda390}/iii-engine:0.22.0-airgap-v1
     depends_on:
       iii-data-init:
         condition: service_completed_successfully
@@ -19,7 +19,7 @@ services:
       - "3112:3112"
       - "49134:49134"
     healthcheck:
-      test: ["/busybox", "nc", "-z", "127.0.0.1", "49134"]
+      test: ["CMD", "/busybox", "nc", "-z", "127.0.0.1", "49134"]
       interval: 10s
       timeout: 5s
       retries: 6

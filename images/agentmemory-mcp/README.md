@@ -1,12 +1,12 @@
 # agentmemory-mcp
 
-This folder contains Docker builds for **iii-engine v0.11.2** and **agentmemory v0.9.26** — optimized for air-gapped AWS EC2 deployment.
+This folder contains Docker builds for **iii-engine v0.22.0** (**image tag `0.22.0-airgap-v1`**) and **agentmemory v0.9.26** — optimized for air-gapped AWS EC2 deployment.
 
 ## What This Does
 
 Two complementary Docker images:
 
-1. **iii-engine:0.11.2** — WebSocket backend service
+1. **iii-engine:0.22.0-airgap-v1** — WebSocket backend service
    - Source: Pre-built binary from iii GitHub releases
    - Base: distroless
    - Ports: 3111 (REST), 3112 (streams), 49134 (WebSocket bridge)
@@ -32,11 +32,11 @@ Air-Gapped EC2 (docker compose up)
 
 ## Image Names (Docker Hub)
 
-- `docker.io/rcamarda390/iii-engine:0.11.2` (Docker Hub)
+- `docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1` (Docker Hub)
 - `docker.io/rcamarda390/agentmemory:0.9.26` (Docker Hub, also `:latest`)
 
 Images are cached through Artifactory's remote proxy:
-- `artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.11.2`
+- `artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.22.0-airgap-v1`
 - `artifactory.foobar.com/docker-remote/rcamarda390/agentmemory:0.9.26`
 
 Pull from Docker Hub directly or through Artifactory (auto-cached on first pull).
@@ -51,7 +51,7 @@ Builds iii-engine independently.
 
 - **Trigger:** Push to `main` when `Dockerfile.iii-engine` or `iii-config.yaml` changes, or manual dispatch
 - **Duration:** ~3 minutes
-- **Output:** `docker.io/rcamarda390/iii-engine:0.11.2`
+- **Output:** `docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1`
 
 ### 2. `build-agentmemory.yml`
 
@@ -80,7 +80,7 @@ Orchestrator — builds iii-engine and/or agentmemory together.
 
 **GitHub** → **Actions** → **build-iii-engine** → **Run workflow** (or auto-triggers on push)
 
-Build output: `docker.io/rcamarda390/iii-engine:0.11.2`
+Build output: `docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1`
 
 ### 2. Trigger agentmemory Build
 
@@ -93,7 +93,7 @@ Set version (default `0.9.26`). Build output: `docker.io/rcamarda390/agentmemory
 On a machine with internet access:
 
 ```bash
-docker pull docker.io/rcamarda390/iii-engine:0.11.2
+docker pull docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1
 docker pull docker.io/rcamarda390/agentmemory:0.9.26
 
 # Run docker compose to test
@@ -108,7 +108,7 @@ After Artifactory security scan approves:
 
 ```bash
 export ARTIFACTORY_REGISTRY=artifactory.foobar.com/docker-remote/rcamarda390
-docker pull $ARTIFACTORY_REGISTRY/iii-engine:0.11.2
+docker pull $ARTIFACTORY_REGISTRY/iii-engine:0.22.0-airgap-v1
 docker pull $ARTIFACTORY_REGISTRY/agentmemory:0.9.26
 docker compose up -d
 ```
@@ -140,5 +140,5 @@ Xenova/all-MiniLM-L6-v2 (~23 MB) is pre-cached at build time. At runtime:
 ## See Also
 
 - [CUSTOMIZATION.md](CUSTOMIZATION.md) — Version bumping, disabling internet features
-- [iii-engine](https://github.com/iii-hq/iii) — v0.11.2 release
+- [iii-engine](https://github.com/iii-hq/iii) — v0.22.0 release
 - [agentmemory](https://github.com/rohitg00/agentmemory) — npm package

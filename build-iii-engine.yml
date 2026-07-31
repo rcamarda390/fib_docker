@@ -24,7 +24,11 @@ jobs:
         shell: bash
         run: |
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-          echo "version=$(grep -E '^ARG III_VERSION=' images/agentmemory-mcp/Dockerfile.iii-engine | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+          VERSION=$(grep -E '^ARG III_VERSION=' images/agentmemory-mcp/Dockerfile.iii-engine | cut -d= -f2)
+          IMAGE_VERSION=$(grep -E '^ARG III_IMAGE_VERSION=' images/agentmemory-mcp/Dockerfile.iii-engine | cut -d= -f2)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image_version=${IMAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${VERSION}-airgap-${IMAGE_VERSION}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -40,9 +44,12 @@ jobs:
           file: ./images/agentmemory-mcp/Dockerfile.iii-engine
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.version }}
+          build-args: |
+            III_VERSION=${{ steps.meta.outputs.version }}
+            III_IMAGE_VERSION=${{ steps.meta.outputs.image_version }}
+          tags: ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.image_tag }}
 
       - name: Smoke test
         run: |
-          docker pull ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.version }}
-          docker run --rm ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.version }} --version
+          docker pull ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.image_tag }}
+          docker run --rm ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.image_tag }} --version
