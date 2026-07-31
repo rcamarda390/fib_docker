@@ -67,7 +67,7 @@ jobs:
 
           sed -i "s/^ARG III_VERSION=.*/ARG III_VERSION=${VERSION}/" images/agentmemory-mcp/Dockerfile.iii-engine
           sed -i "s/^ARG III_IMAGE_VERSION=.*/ARG III_IMAGE_VERSION=${IMAGE_VERSION}/" images/agentmemory-mcp/Dockerfile.iii-engine
-          sed -i -E "s#(iii-engine:)[^[:space:]]+#\\1${IMAGE_TAG}#" images/agentmemory-mcp/docker-compose.yml
+          sed -i -E "/^\s*image:.*\/iii-engine:/ s#(iii-engine:)[^[:space:]]+#\\1${IMAGE_TAG}#" images/agentmemory-mcp/docker-compose.yml
 
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "image_version=${IMAGE_VERSION}" >> "$GITHUB_OUTPUT"
