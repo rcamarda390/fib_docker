@@ -8,7 +8,7 @@ services:
     restart: "no"
 
   iii-engine:
-    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/iii-engine:0.22.0-airgap-v5
+    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/iii-engine:0.22.0-airgap-v6
     depends_on:
       iii-data-init:
         condition: service_completed_successfully
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   agentmemory:
-    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/agentmemory:0.9.28-build-v1
+    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/agentmemory:0.9.28-build-v2
     depends_on:
       iii-engine:
         condition: service_healthy
