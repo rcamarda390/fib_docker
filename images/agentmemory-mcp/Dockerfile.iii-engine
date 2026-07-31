@@ -1,17 +1,19 @@
-ARG III_VERSION=0.11.2
+ARG III_VERSION=0.21.6
 ARG CURL_INSECURE=0
 
 FROM debian:bookworm-slim AS downloader
 ARG III_VERSION
 ARG TARGETARCH
 ARG CURL_INSECURE
+# Upgrade all packages to pull in any available security patches before building
 RUN apt-get update \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends ca-certificates curl tar busybox-static \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /tmp
 RUN case "$TARGETARCH" in \
-      amd64) III_ARCH='x86_64-unknown-linux-gnu'; III_SHA256='9c83c47788b4ef4beeb65dd9bf37e94f993770cd3db874464c3ce1cdc92352cd' ;; \
-      arm64) III_ARCH='aarch64-unknown-linux-gnu'; III_SHA256='e0d35ee54a6b6c8a46576ab661e1711d11eb4dafeb1be8e1dbd1cc0ccb48b615' ;; \
+      amd64) III_ARCH='x86_64-unknown-linux-gnu'; III_SHA256='589f02da743153b78ec5dd4f5f37d44b4125d80d2d8c878615561ee379a21dff' ;; \
+      arm64) III_ARCH='aarch64-unknown-linux-gnu'; III_SHA256='b53b82a32ac99c7dc4645bf36252811a1081f16175c9d3d59c705efec5617bd1' ;; \
       *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && if [ "$CURL_INSECURE" = '1' ]; then CURL_FLAGS='-k'; else CURL_FLAGS=''; fi \
