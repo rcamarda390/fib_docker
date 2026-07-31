@@ -32,7 +32,7 @@ services:
       iii-engine:
         condition: service_healthy
     environment:
-      III_ENGINE_URL: ws://iii-engine:0.22.0-airgap-v4
+      III_ENGINE_URL: ws://iii-engine:49134
       TRANSFORMERS_OFFLINE: "1"
       HF_HUB_OFFLINE: "1"
     volumes:
@@ -40,7 +40,7 @@ services:
     ports:
       - "3113:3113"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://iii-engine:0.22.0-airgap-v4 || true"]
+      test: ["CMD-SHELL", "curl -f http://iii-engine:3111/agentmemory/livez || true"]
       interval: 15s
       timeout: 5s
       retries: 6
