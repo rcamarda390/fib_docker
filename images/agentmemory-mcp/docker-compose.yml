@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   agentmemory:
-    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/agentmemory:0.9.26-build-v1
+    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/agentmemory:0.9.28-build-v1
     depends_on:
       iii-engine:
         condition: service_healthy
