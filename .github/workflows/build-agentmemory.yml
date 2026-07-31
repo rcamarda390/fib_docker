@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "agentmemory version to build (leave blank to auto-bump patch from npm)"
+        description: "agentmemory version to build (leave blank to use latest published npm version)"
         required: false
         default: ''
 
@@ -23,11 +23,7 @@ jobs:
         run: |
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
           if [ -z "${{ inputs.version }}" ]; then
-            CURRENT=$(npm view @agentmemory/agentmemory version 2>/dev/null || echo "0.9.26")
-            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-            MINOR=$(echo "$CURRENT" | cut -d. -f2)
-            PATCH=$(echo "$CURRENT" | cut -d. -f3)
-            VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            VERSION=$(npm view @agentmemory/agentmemory version 2>/dev/null || echo "0.9.26")
           else
             VERSION="${{ inputs.version }}"
           fi
