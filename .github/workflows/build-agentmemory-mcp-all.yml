@@ -28,7 +28,7 @@ on:
           - 'true'
           - 'false'
       agentmemory_version:
-        description: "agentmemory version to build (leave blank to auto-bump patch from npm)"
+        description: "agentmemory version to build (leave blank to use latest published npm version)"
         required: false
         default: ''
 
@@ -96,11 +96,7 @@ jobs:
             if [ -n "$INPUT_AGENTMEMORY_VERSION" ]; then
               AGENTMEMORY_VERSION="$INPUT_AGENTMEMORY_VERSION"
             else
-              CURRENT=$(npm view @agentmemory/agentmemory version 2>/dev/null || echo "0.9.26")
-              MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-              MINOR=$(echo "$CURRENT" | cut -d. -f2)
-              PATCH=$(echo "$CURRENT" | cut -d. -f3)
-              AGENTMEMORY_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              AGENTMEMORY_VERSION=$(npm view @agentmemory/agentmemory version 2>/dev/null || echo "0.9.26")
             fi
             echo "agentmemory_version=${AGENTMEMORY_VERSION}" >> "$GITHUB_OUTPUT"
           fi
