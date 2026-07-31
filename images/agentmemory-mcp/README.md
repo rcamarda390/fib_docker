@@ -1,6 +1,6 @@
 # agentmemory-mcp
 
-This folder contains Docker builds for **iii-engine v0.22.0** (**image tag `0.22.0-airgap-v1`**) and **agentmemory v0.9.26** — optimized for air-gapped AWS EC2 deployment.
+This folder contains Docker builds for **iii-engine v0.22.0** (**image tag `0.22.0-airgap-v1`**) and **agentmemory v0.9.26** (**image tag `0.9.26-build-v1`**) — optimized for air-gapped AWS EC2 deployment.
 
 ## What This Does
 
@@ -11,7 +11,7 @@ Two complementary Docker images:
    - Base: distroless
    - Ports: 3111 (REST), 3112 (streams), 49134 (WebSocket bridge)
 
-2. **agentmemory:0.9.26** — MCP server + viewer
+2. **agentmemory:0.9.26-build-v1** — MCP server + viewer
    - Source: `@agentmemory/agentmemory` npm package
    - Build stages: npm-install → model-cache → production
    - Pre-cached: Xenova/all-MiniLM-L6-v2 (~23 MB)
@@ -33,11 +33,11 @@ Air-Gapped EC2 (docker compose up)
 ## Image Names (Docker Hub)
 
 - `docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1` (Docker Hub)
-- `docker.io/rcamarda390/agentmemory:0.9.26` (Docker Hub, also `:latest`)
+- `docker.io/rcamarda390/agentmemory:0.9.26-build-v1` (Docker Hub, also `:0.9.26` and `:latest`)
 
 Images are cached through Artifactory's remote proxy:
 - `artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.22.0-airgap-v1`
-- `artifactory.foobar.com/docker-remote/rcamarda390/agentmemory:0.9.26`
+- `artifactory.foobar.com/docker-remote/rcamarda390/agentmemory:0.9.26-build-v1`
 
 Pull from Docker Hub directly or through Artifactory (auto-cached on first pull).
 
@@ -58,9 +58,9 @@ Builds iii-engine independently.
 Builds agentmemory independently.
 
 - **Trigger:** Manual dispatch only (`workflow_dispatch`)
-- **Input:** `version` (default: `0.9.26`) — any npm version
+- **Inputs:** `version` (leave blank to reuse the tracked package version) and optional `image_version` override
 - **Duration:** ~10-15 minutes (includes HuggingFace model caching)
-- **Output:** `docker.io/rcamarda390/agentmemory:<version>` and `:latest`
+- **Output:** `docker.io/rcamarda390/agentmemory:<version>-build-<image-version>`, plus `:<version>` and `:latest` aliases
 
 ### 3. `build-agentmemory-mcp-all.yml`
 
@@ -70,7 +70,8 @@ Orchestrator — builds iii-engine and/or agentmemory together.
 - **Inputs:**
   - `build_iii_engine` (true/false, default: true)
   - `build_agentmemory` (true/false, default: true)
-  - `agentmemory_version` (default: 0.9.26)
+  - `iii_version` / `iii_image_version` (both optional; blank means reuse tracked version and auto-bump the image revision)
+  - `agentmemory_version` / `agentmemory_image_version` (both optional; blank means reuse tracked version and auto-bump the image revision)
 - **Behavior:** Builds in sequence (iii-engine first, then agentmemory); stops if iii-engine fails
 - **Use case:** "Build everything at once"
 
@@ -86,7 +87,7 @@ Build output: `docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1`
 
 **GitHub** → **Actions** → **build-agentmemory** → **Run workflow**
 
-Set version (default `0.9.26`). Build output: `docker.io/rcamarda390/agentmemory:0.9.26` + `:latest`
+Leave `version` blank to rebuild the tracked package version with the next image revision automatically, or set a new package version to reset the image revision to `v1`.
 
 ### 3. Pull & Vet in Staging
 
@@ -94,7 +95,7 @@ On a machine with internet access:
 
 ```bash
 docker pull docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1
-docker pull docker.io/rcamarda390/agentmemory:0.9.26
+docker pull docker.io/rcamarda390/agentmemory:0.9.26-build-v1
 
 # Run docker compose to test
 docker compose up -d
@@ -109,7 +110,7 @@ After Artifactory security scan approves:
 ```bash
 export ARTIFACTORY_REGISTRY=artifactory.foobar.com/docker-remote/rcamarda390
 docker pull $ARTIFACTORY_REGISTRY/iii-engine:0.22.0-airgap-v1
-docker pull $ARTIFACTORY_REGISTRY/agentmemory:0.9.26
+docker pull $ARTIFACTORY_REGISTRY/agentmemory:0.9.26-build-v1
 docker compose up -d
 ```
 
@@ -139,6 +140,6 @@ Xenova/all-MiniLM-L6-v2 (~23 MB) is pre-cached at build time. At runtime:
 
 ## See Also
 
-- [CUSTOMIZATION.md](CUSTOMIZATION.md) — Version bumping, disabling internet features
+- [CUSTOMIZATION.md](CUSTOMIZATION.md) — Automated version tracking, overrides, disabling internet features
 - [iii-engine](https://github.com/iii-hq/iii) — v0.22.0 release
 - [agentmemory](https://github.com/rohitg00/agentmemory) — npm package
