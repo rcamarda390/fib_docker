@@ -1,35 +1,36 @@
 # Customization
 
-## Bump Versions
+## Automated Version Tracking
 
-### agentmemory Version (Easy — No Code Changes)
+Only the workflows in `.github/workflows/` are active GitHub Actions workflows. The similarly named YAML files in the repository root are legacy copies and do not run in GitHub Actions.
 
-Each time you want to rebuild with a new agentmemory version:
+### agentmemory Version
 
 1. **GitHub** → **Actions** → **build-agentmemory** → **Run workflow**
-2. Set **version** to any npm version (e.g., `0.9.27`, `0.10.0`)
-3. Click **Run workflow**
+2. Leave **version** blank to rebuild the currently tracked package version and auto-bump the image revision, or set it to a new npm version (e.g., `0.9.27`, `0.10.0`)
+3. Optionally set **image_version** if you need an exact image revision instead of the next auto-bump
+4. Click **Run workflow**
 
-No code edits needed.
+The workflow updates `Dockerfile.agentmemory` and `docker-compose.yml` for you, and tags the image as `<agentmemory-version>-build-<image-version>`.
 
-### iii-engine Version (Requires Code Change)
+### iii-engine Version
 
-If upgrading to a different iii-engine version, or rebuilding the same iii release with image-only changes:
+1. **GitHub** → **Actions** → **build-iii-engine** → **Run workflow**
+2. Leave **iii_version** blank to rebuild the currently tracked iii release and auto-bump the image revision
+3. Set **iii_version** to a new upstream iii release to reset the image revision to `v1`
+4. Optionally set **iii_image_version** if you need an exact image revision instead of the next auto-bump
+5. Click **Run workflow**
 
-1. Edit `Dockerfile.iii-engine`:
-   ```dockerfile
-   ARG III_VERSION=0.X.Y    # Upstream iii release
-   ARG III_IMAGE_VERSION=vN # Bump when the image changes for the same iii release
-   ```
+The workflow updates `Dockerfile.iii-engine` and `docker-compose.yml` for you, and tags the image as `<iii-version>-airgap-<image-version>`.
 
-2. Rebuild with the combined image tag format `<iii-version>-airgap-<image-version>`
+### Combined Workflow
 
-3. Update `docker-compose.yml`:
-   ```yaml
-   image: ${ARTIFACTORY_REGISTRY:-ghcr.io/rcamarda390}/iii-engine:0.X.Y-airgap-vN
-   ```
+Use `build-agentmemory-mcp-all` when you want to rebuild one or both images together.
 
-4. Commit and push to `main` (auto-triggers build)
+- `build_iii_engine` / `build_agentmemory` choose which images to publish
+- Leave version inputs blank to reuse the tracked upstream versions
+- Leave image-version inputs blank to auto-bump the tracked image revisions
+- Set any version input explicitly when you want to jump to a new upstream version or force a specific image revision
 
 ## Disable Internet Features
 
@@ -78,9 +79,9 @@ Token scope: `read:packages`, `write:packages`
 ### Updating Docker Hub Image Names
 
 If you change the repository owner or namespace, update these files:
-- `.github/workflows/build-iii-engine.yml` → line 56
-- `.github/workflows/build-agentmemory.yml` → lines 44-45
-- `.github/workflows/build-agentmemory-mcp-all.yml` → lines 62, 95-96
+- `.github/workflows/build-iii-engine.yml`
+- `.github/workflows/build-agentmemory.yml`
+- `.github/workflows/build-agentmemory-mcp-all.yml`
 
 Replace `${{ secrets.DOCKERHUB_USERNAME }}` with hardcoded username if needed, or update the secret name to match your setup.
 
