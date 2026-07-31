@@ -32,7 +32,11 @@ jobs:
         shell: bash
         run: |
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-          echo "iii_version=$(grep -E '^ARG III_VERSION=' images/agentmemory-mcp/Dockerfile.iii-engine | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+          III_VERSION=$(grep -E '^ARG III_VERSION=' images/agentmemory-mcp/Dockerfile.iii-engine | cut -d= -f2)
+          III_IMAGE_VERSION=$(grep -E '^ARG III_IMAGE_VERSION=' images/agentmemory-mcp/Dockerfile.iii-engine | cut -d= -f2)
+          echo "iii_version=${III_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "iii_image_version=${III_IMAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "iii_image_tag=${III_VERSION}-airgap-${III_IMAGE_VERSION}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -50,13 +54,16 @@ jobs:
           file: ./images/agentmemory-mcp/Dockerfile.iii-engine
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_version }}
+          build-args: |
+            III_VERSION=${{ steps.meta.outputs.iii_version }}
+            III_IMAGE_VERSION=${{ steps.meta.outputs.iii_image_version }}
+          tags: ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_image_tag }}
 
       - name: Smoke test iii-engine
         if: inputs.build_iii_engine
         run: |
-          docker pull ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_version }}
-          docker run --rm ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_version }} --version
+          docker pull ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_image_tag }}
+          docker run --rm ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_image_tag }} --version
 
       - name: Build agentmemory
         if: inputs.build_agentmemory
@@ -87,7 +94,7 @@ jobs:
         run: |
           echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
           if [ "${{ inputs.build_iii_engine }}" = "true" ]; then
-            echo "✅ iii-engine:${{ steps.meta.outputs.iii_version }} → ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "✅ iii-engine:${{ steps.meta.outputs.iii_image_tag }} → ghcr.io/${{ steps.meta.outputs.owner }}/iii-engine:${{ steps.meta.outputs.iii_image_tag }}" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ inputs.build_agentmemory }}" = "true" ]; then
             echo "✅ agentmemory:${{ inputs.agentmemory_version }} → ghcr.io/${{ steps.meta.outputs.owner }}/agentmemory:${{ inputs.agentmemory_version }}" >> $GITHUB_STEP_SUMMARY

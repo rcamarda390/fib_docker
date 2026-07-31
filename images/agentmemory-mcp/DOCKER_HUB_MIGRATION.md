@@ -24,7 +24,7 @@ Air-Gapped EC2 (pulls from artifactory.foobar.com/docker-remote/...)
 
 | Service | Docker Hub | Artifactory |
 |---------|------------|-------------|
-| iii-engine | `docker.io/rcamarda390/iii-engine:0.11.2` | `artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.11.2` |
+| iii-engine | `docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1` | `artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.22.0-airgap-v1` |
 | agentmemory | `docker.io/rcamarda390/agentmemory:0.9.26` | `artifactory.foobar.com/docker-remote/rcamarda390/agentmemory:0.9.26` |
 
 ## Secrets Required
@@ -38,9 +38,9 @@ See `.github/workflows/build-gnosis-mcp.yml` for reference pattern.
 ## Troubleshooting
 
 ### Images don't appear in Artifactory
-1. Verify images built successfully in Docker Hub: `docker pull docker.io/rcamarda390/iii-engine:0.11.2`
+1. Verify images built successfully in Docker Hub: `docker pull docker.io/rcamarda390/iii-engine:0.22.0-airgap-v1`
 2. Verify Artifactory's `docker-remote` remote repository points to `https://registry-1.docker.io` (Docker Hub)
-3. Manually pull through Artifactory to warm cache: `docker pull artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.11.2`
+3. Manually pull through Artifactory to warm cache: `docker pull artifactory.foobar.com/docker-remote/rcamarda390/iii-engine:0.22.0-airgap-v1`
 
 ### Workflows fail with permission errors
 1. Verify `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets are set in Repository Settings → Secrets and variables → Actions

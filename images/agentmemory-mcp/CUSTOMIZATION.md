@@ -14,18 +14,19 @@ No code edits needed.
 
 ### iii-engine Version (Requires Code Change)
 
-If upgrading to a different iii-engine version:
+If upgrading to a different iii-engine version, or rebuilding the same iii release with image-only changes:
 
 1. Edit `Dockerfile.iii-engine`:
    ```dockerfile
-   ARG III_VERSION=0.X.Y  # Update this line
+   ARG III_VERSION=0.X.Y    # Upstream iii release
+   ARG III_IMAGE_VERSION=vN # Bump when the image changes for the same iii release
    ```
 
-2. Edit `.github/workflows/build-iii-engine.yml` — update docker build tags
+2. Rebuild with the combined image tag format `<iii-version>-airgap-<image-version>`
 
 3. Update `docker-compose.yml`:
    ```yaml
-   image: ${ARTIFACTORY_REGISTRY:-ghcr.io/rcamarda390}/iii-engine:0.X.Y
+   image: ${ARTIFACTORY_REGISTRY:-ghcr.io/rcamarda390}/iii-engine:0.X.Y-airgap-vN
    ```
 
 4. Commit and push to `main` (auto-triggers build)
@@ -47,7 +48,7 @@ The agentmemory image is pre-configured for offline operation:
 
 ### iii-engine — Check For Internet Dependencies
 
-iii-engine v0.11.2 generally does not require internet at runtime. If it attempts outbound connections:
+iii-engine v0.22.0 generally does not require internet at runtime. If it attempts outbound connections:
 
 1. Check `iii-config.yaml` for remote service URLs
 2. Look for env vars that enable remote calls
@@ -108,7 +109,7 @@ If you improve the Docker build or offline support, consider upstreaming:
 
 ### To iii-hq/iii
 
-If v0.11.2 needs adjustments for air-gapped environments:
+If v0.22.0 needs adjustments for air-gapped environments:
 
 ```bash
 # Open issue: "Support air-gapped deployment (disable internet features)"

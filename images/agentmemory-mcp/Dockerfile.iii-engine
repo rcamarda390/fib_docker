@@ -1,4 +1,5 @@
 ARG III_VERSION=0.22.0
+ARG III_IMAGE_VERSION=v1
 ARG CURL_INSECURE=0
 
 FROM debian:bookworm-slim AS downloader
@@ -12,8 +13,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /tmp
 RUN case "$TARGETARCH" in \
-      amd64) III_ARCH='x86_64-unknown-linux-gnu'; III_SHA256='3479968f31ff6376aa4b7b21b0fb0815ddd5873ed521e3c14e60972cd9941766' ;; \
-      arm64) III_ARCH='aarch64-unknown-linux-gnu'; III_SHA256='a628a1f419c1b8afc52d5cafc50d406ffb9f015828ca1196e66615a5eff61be8' ;; \
+      amd64) III_ARCH='x86_64-unknown-linux-gnu'; III_SHA256='3479968f31ff6376aa4b7b21b0fb0815ddd5873ed521e3c14e60972cd9941766'; LIB_DIR='/lib/x86_64-linux-gnu' ;; \
+      arm64) III_ARCH='aarch64-unknown-linux-gnu'; III_SHA256='a628a1f419c1b8afc52d5cafc50d406ffb9f015828ca1196e66615a5eff61be8'; LIB_DIR='/lib/aarch64-linux-gnu' ;; \
       *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && if [ "$CURL_INSECURE" = '1' ]; then CURL_FLAGS='-k'; else CURL_FLAGS=''; fi \
@@ -21,12 +22,16 @@ RUN case "$TARGETARCH" in \
  && echo "$III_SHA256  iii-${III_ARCH}.tar.gz" | sha256sum -c - \
  && tar -xzf "iii-${III_ARCH}.tar.gz" \
  && install -Dm0755 iii /out/usr/local/bin/iii \
+ && install -Dm0644 "${LIB_DIR}/libgcc_s.so.1" "/out${LIB_DIR}/libgcc_s.so.1" \
  && install -Dm0755 /bin/busybox /out/busybox
 
 FROM gcr.io/distroless/base-debian12:nonroot
 ARG III_VERSION
+ARG III_IMAGE_VERSION
 LABEL org.opencontainers.image.title="iii-engine" \
-      org.opencontainers.image.description="Pinned iii-engine ${III_VERSION} image for air-gapped agentmemory deployments"
+      org.opencontainers.image.description="Pinned iii-engine ${III_VERSION} image for air-gapped agentmemory deployments" \
+      iii.version="${III_VERSION}" \
+      iii.image-version="${III_IMAGE_VERSION}"
 COPY --from=downloader /out/ /
 COPY iii-config.yaml /etc/iii/config.yaml
 VOLUME ["/data"]
