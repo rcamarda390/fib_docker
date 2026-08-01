@@ -88,7 +88,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Docker Scout - CVE Report
-        uses: docker/scout-action@v1
+        uses: docker/scout-action@v1.23.1
         with:
           command: cves
           image: rcamarda390/fib_docker:latest
@@ -97,7 +97,7 @@ jobs:
           write-comment: true
 
       - name: Docker Scout - Image Policy Check
-        uses: docker/scout-action@v1
+        uses: docker/scout-action@v1.23.1
         with:
           command: compare
           image: rcamarda390/fib_docker:latest
