@@ -41,8 +41,12 @@ RUN set -eux; \
 # Python packages (VSCode devcontainer support)
 # ============================================================
 RUN set -eux; \
-    python -m pip install --upgrade pip setuptools wheel; \
+    python -m pip install --upgrade --force-reinstall \
+        "pip>=26.2" \
+        "setuptools>=78.1.1" \
+        wheel; \
     pip install \
+        "msgpack>=1.2.1" \
         psycopg2-binary \
         redshift-connector \
         sqlalchemy \
@@ -50,6 +54,7 @@ RUN set -eux; \
         ruff \
         sqlfluff \
         autopep8; \
+    python -m pip show msgpack setuptools; \
     pip check
 
 # ============================================================
