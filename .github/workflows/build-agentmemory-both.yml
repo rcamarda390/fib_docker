@@ -1,0 +1,58 @@
+name: Build both agentmemory MCP images
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_ghcr:
+        description: Push both images to GitHub Container Registry
+        required: true
+        default: false
+        type: boolean
+      push_dockerhub:
+        description: Push both images to Docker Hub
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-agentmemory:
+    name: Build agentmemory MCP image
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_name: agentmemory
+      context: ./images/agentmemory-mcp
+      dockerfile: ./images/agentmemory-mcp/Dockerfile.agentmemory
+      config: images/agentmemory/image.yaml
+      version_arg: AGENTMEMORY_VERSION
+      smoke_env: >-
+        -e III_ENGINE_URL=ws://localhost:49134
+        -e TRANSFORMERS_OFFLINE=1
+        -e HF_HUB_OFFLINE=1
+      smoke_command: 'node,-e,console.log("agentmemory image OK")'
+      publish_ghcr: ${{ inputs.push_ghcr }}
+      publish_dockerhub: ${{ inputs.push_dockerhub }}
+
+  build-iii-engine:
+    name: Build iii-engine MCP image
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_name: iii-engine
+      context: ./images/agentmemory-mcp
+      dockerfile: ./images/agentmemory-mcp/Dockerfile.iii-engine
+      config: images/iii-engine/image.yaml
+      version_arg: III_VERSION
+      smoke_command: --version
+      publish_ghcr: ${{ inputs.push_ghcr }}
+      publish_dockerhub: ${{ inputs.push_dockerhub }}
