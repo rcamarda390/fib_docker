@@ -76,7 +76,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
         bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
-        libuuid1 ncurses-base util-linux libacl1 liblastlog2-2 ncurses-bin libmount1 login
+        libuuid1 ncurses-base util-linux libacl1 liblastlog2-2 ncurses-bin libmount1 login mount
 
 COPY --from=builder /install             /usr/local
 COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
