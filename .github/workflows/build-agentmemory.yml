@@ -70,7 +70,7 @@ jobs:
             IMAGE_VERSION='v1'
           fi
 
-          IMAGE_TAG="${VERSION}-build-${IMAGE_VERSION}"
+          IMAGE_TAG="${VERSION}-${IMAGE_VERSION}"
 
           sed -i "s/^ARG AGENTMEMORY_VERSION=.*/ARG AGENTMEMORY_VERSION=${VERSION}/" images/agentmemory-mcp/Dockerfile.agentmemory
           sed -i "s/^ARG AGENTMEMORY_IMAGE_VERSION=.*/ARG AGENTMEMORY_IMAGE_VERSION=${IMAGE_VERSION}/" images/agentmemory-mcp/Dockerfile.agentmemory

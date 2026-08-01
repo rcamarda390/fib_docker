@@ -81,7 +81,7 @@ jobs:
               III_IMAGE_VERSION='v1'
             fi
 
-            III_IMAGE_TAG="${III_VERSION}-airgap-${III_IMAGE_VERSION}"
+            III_IMAGE_TAG="${III_VERSION}-${III_IMAGE_VERSION}"
 
             sed -i "s/^ARG III_VERSION=.*/ARG III_VERSION=${III_VERSION}/" images/agentmemory-mcp/Dockerfile.iii-engine
             sed -i "s/^ARG III_IMAGE_VERSION=.*/ARG III_IMAGE_VERSION=${III_IMAGE_VERSION}/" images/agentmemory-mcp/Dockerfile.iii-engine
@@ -108,7 +108,7 @@ jobs:
               AGENTMEMORY_IMAGE_VERSION='v1'
             fi
 
-            AGENTMEMORY_IMAGE_TAG="${AGENTMEMORY_VERSION}-build-${AGENTMEMORY_IMAGE_VERSION}"
+            AGENTMEMORY_IMAGE_TAG="${AGENTMEMORY_VERSION}-${AGENTMEMORY_IMAGE_VERSION}"
 
             sed -i "s/^ARG AGENTMEMORY_VERSION=.*/ARG AGENTMEMORY_VERSION=${AGENTMEMORY_VERSION}/" images/agentmemory-mcp/Dockerfile.agentmemory
             sed -i "s/^ARG AGENTMEMORY_IMAGE_VERSION=.*/ARG AGENTMEMORY_IMAGE_VERSION=${AGENTMEMORY_IMAGE_VERSION}/" images/agentmemory-mcp/Dockerfile.agentmemory

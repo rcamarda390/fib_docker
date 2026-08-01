@@ -63,7 +63,7 @@ jobs:
             IMAGE_VERSION='v1'
           fi
 
-          IMAGE_TAG="${VERSION}-airgap-${IMAGE_VERSION}"
+          IMAGE_TAG="${VERSION}-${IMAGE_VERSION}"
 
           sed -i "s/^ARG III_VERSION=.*/ARG III_VERSION=${VERSION}/" images/agentmemory-mcp/Dockerfile.iii-engine
           sed -i "s/^ARG III_IMAGE_VERSION=.*/ARG III_IMAGE_VERSION=${IMAGE_VERSION}/" images/agentmemory-mcp/Dockerfile.iii-engine
