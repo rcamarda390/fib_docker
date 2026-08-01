@@ -72,6 +72,9 @@ RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends libgomp1 \
     && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
+    && dpkg --purge --force-depends \
+        bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
+        libuuid1 ncurses-base util-linux \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis
 
