@@ -31,7 +31,10 @@ WORKDIR /build
 
 ARG GNOSIS_VERSION=0.13.3
 ARG EXTRAS="embeddings"
-RUN pip install --prefix=/install "gnosis-mcp[${EXTRAS}]==${GNOSIS_VERSION}"
+COPY requirements.lock /build/requirements.lock
+RUN test "$EXTRAS" = "embeddings" \
+    && grep -q "^gnosis-mcp==${GNOSIS_VERSION} " /build/requirements.lock \
+    && pip install --require-hashes --prefix=/install -r /build/requirements.lock
 
 # Patch rest.py — replace the single-lifespan Starlette construction with a
 # combined lifespan that also runs session_manager for StreamableHTTP.

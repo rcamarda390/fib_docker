@@ -12,6 +12,15 @@ image revision. The workflows only read these values; they never modify
 tracked files or push commits back to the repository. Additional Dockerfile
 arguments belong in the `build_args` map.
 
+The npm dependency graph is reviewed in `package-lock.json`; update
+`package.json` and regenerate the lockfile before changing application
+versions. The Dockerfile uses `npm ci` and does not resolve a fresh graph
+during image builds.
+
+The Gnosis image uses a hash-pinned Python lockfile generated from
+`images/gnosis-mcp/requirements.in`. Regenerate and review
+`requirements.lock` when updating its upstream version or extras.
+
 Images are tagged as `<upstream-version>-v<revision>` and published to both
 GHCR and Docker Hub. The Docker Hub username is the repository variable
 `DOCKERHUB_USERNAME`; the access token is the `DOCKERHUB_TOKEN` repository
