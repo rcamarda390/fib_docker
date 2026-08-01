@@ -36,4 +36,5 @@ jobs:
       platforms: linux/amd64
       smoke_env: -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1
       smoke_command: check
+      scan: true
       publish: ${{ github.event_name != 'pull_request' }}

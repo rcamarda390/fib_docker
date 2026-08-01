@@ -41,6 +41,10 @@ on:
         required: false
         default: true
         type: boolean
+      scan:
+        required: false
+        default: false
+        type: boolean
     outputs:
       image_tag:
         description: Versioned image tag
@@ -140,6 +144,16 @@ jobs:
           set -euo pipefail
           IFS=',' read -r -a SMOKE_ARGS <<< "$SMOKE_COMMAND"
           docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
+
+      - name: Scan candidate image with Trivy
+        if: inputs.scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: mcp-smoke:${{ github.run_id }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
 
       - name: Log in to GHCR
         if: inputs.publish && inputs.publish_ghcr

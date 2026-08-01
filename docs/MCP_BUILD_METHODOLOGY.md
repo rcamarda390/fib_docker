@@ -20,7 +20,10 @@ Each image has an individual caller workflow. The shared
 `.github/workflows/build-image.yml` workflow owns checkout, metadata parsing,
 GHCR authentication with `GITHUB_TOKEN`, Docker Hub authentication with
 `vars.DOCKERHUB_USERNAME` and `secrets.DOCKERHUB_TOKEN`, and dual publishing.
-Image-specific smoke tests remain in the caller workflows.
+Image-specific smoke tests remain in the caller workflows. Every candidate
+Gnosis candidates are also scanned with Trivy for HIGH and CRITICAL
+vulnerabilities, including unfixed findings, before any registry login or
+publication.
 
 The non-MCP `.github/workflows/dockerhub.yml` workflow builds the repository
 root `Dockerfile` and remains outside this MCP standardization.
