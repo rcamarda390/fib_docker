@@ -30,3 +30,58 @@ jobs:
           tags: |
             rcamarda390/fib_docker:latest
             rcamarda390/fib_docker:build-${{ github.run_number }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: rcamarda390/fib_docker:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
+
+      - name: Run Trivy scan and fail on vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: rcamarda390/fib_docker:latest
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  docker-scout:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Scout - CVE Report
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: rcamarda390/fib_docker:latest
+          only-severities: critical,high
+          exit-code: true
+          write-comment: true
+
+      - name: Docker Scout - Image Policy Check
+        uses: docker/scout-action@v1
+        with:
+          command: compare
+          image: rcamarda390/fib_docker:latest
+          to: 'registry://rcamarda390/fib_docker:latest'
+          write-comment: true
