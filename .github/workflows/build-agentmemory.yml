@@ -8,6 +8,12 @@ on:
       - images/agentmemory-mcp/**
       - .github/workflows/build-agentmemory.yml
       - .github/workflows/build-image.yml
+  pull_request:
+    paths:
+      - images/agentmemory/**
+      - images/agentmemory-mcp/**
+      - .github/workflows/build-agentmemory.yml
+      - .github/workflows/build-image.yml
   schedule:
     - cron: "9 5 * * 1"
   workflow_dispatch:
@@ -34,3 +40,4 @@ jobs:
         -e TRANSFORMERS_OFFLINE=1
         -e HF_HUB_OFFLINE=1
       smoke_command: 'node,-e,console.log("agentmemory image OK")'
+      publish: ${{ github.event_name != 'pull_request' }}
