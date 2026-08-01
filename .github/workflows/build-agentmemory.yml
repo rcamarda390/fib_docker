@@ -17,6 +17,7 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build-image.yml
+    secrets: inherit
     permissions:
       contents: read
       packages: write
