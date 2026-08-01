@@ -9,6 +9,8 @@ on:
       - images/agentmemory-mcp/iii-config.yaml
       - .github/workflows/build-iii-engine.yml
       - .github/workflows/build-image.yml
+  schedule:
+    - cron: "37 4 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -28,14 +30,4 @@ jobs:
       dockerfile: ./images/agentmemory-mcp/Dockerfile.iii-engine
       config: images/iii-engine/image.yaml
       version_arg: III_VERSION
-
-  smoke-test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Smoke test
-        env:
-          IMAGE: docker.io/${{ vars.DOCKERHUB_USERNAME }}/iii-engine:${{ needs.build.outputs.image_tag }}
-        run: |
-          docker pull "$IMAGE"
-          docker run --rm "$IMAGE" --version
+      smoke_command: --version

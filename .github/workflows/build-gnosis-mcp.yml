@@ -7,6 +7,8 @@ on:
       - images/gnosis-mcp/**
       - .github/workflows/build-gnosis-mcp.yml
       - .github/workflows/build-image.yml
+  schedule:
+    - cron: "51 4 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -27,17 +29,5 @@ jobs:
       config: images/gnosis-mcp/image.yaml
       version_arg: GNOSIS_VERSION
       platforms: linux/amd64
-
-  smoke-test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Smoke test
-        env:
-          IMAGE: docker.io/${{ vars.DOCKERHUB_USERNAME }}/gnosis-mcp:${{ needs.build.outputs.image_tag }}
-        run: |
-          docker pull "$IMAGE"
-          docker run --rm \
-            -e HF_HUB_OFFLINE=1 \
-            -e TRANSFORMERS_OFFLINE=1 \
-            "$IMAGE" check
+      smoke_env: -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1
+      smoke_command: check
