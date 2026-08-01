@@ -21,8 +21,9 @@ Each image has an individual caller workflow. The shared
 GHCR authentication with `GITHUB_TOKEN`, Docker Hub authentication with
 `vars.DOCKERHUB_USERNAME` and `secrets.DOCKERHUB_TOKEN`, and dual publishing.
 Image-specific smoke tests remain in the caller workflows. Every candidate
-image is also scanned with Trivy for HIGH and CRITICAL vulnerabilities,
-including unfixed findings, before any registry login or publication.
+Gnosis candidates are also scanned with Trivy for HIGH and CRITICAL
+vulnerabilities, including unfixed findings, before any registry login or
+publication.
 
 The non-MCP `.github/workflows/dockerhub.yml` workflow builds the repository
 root `Dockerfile` and remains outside this MCP standardization.

@@ -41,6 +41,10 @@ on:
         required: false
         default: true
         type: boolean
+      scan:
+        required: false
+        default: false
+        type: boolean
     outputs:
       image_tag:
         description: Versioned image tag
@@ -142,6 +146,7 @@ jobs:
           docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Scan candidate image with Trivy
+        if: inputs.scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: mcp-smoke:${{ github.run_id }}

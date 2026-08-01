@@ -70,7 +70,8 @@ FROM python:${PYTHON_VERSION}-slim AS runtime
 
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends libgomp1 curl \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis
 
@@ -97,7 +98,7 @@ EXPOSE 8000
 VOLUME ["/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${GNOSIS_MCP_PORT}/health" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % __import__('os').environ['GNOSIS_MCP_PORT'])" || exit 1
 
 ARG GNOSIS_VERSION=0.13.3
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
