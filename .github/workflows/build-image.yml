@@ -29,6 +29,10 @@ on:
         required: false
         default: ""
         type: string
+      publish:
+        required: false
+        default: true
+        type: boolean
     outputs:
       image_tag:
         description: Versioned image tag
@@ -63,6 +67,7 @@ jobs:
           INPUT_IMAGE_NAME: ${{ inputs.image_name }}
           VERSION_ARG: ${{ inputs.version_arg }}
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          PUBLISH: ${{ inputs.publish }}
         shell: bash
         run: |
           set -euo pipefail
@@ -79,7 +84,8 @@ jobs:
           abort "latest must be false for MCP images" if publish.fetch("latest", false)
           abort "both registries must be enabled" unless publish.fetch("ghcr") && publish.fetch("dockerhub")
           dockerhub = ARGV[3]
-          abort "DOCKERHUB_USERNAME is not configured" if dockerhub.empty?
+          abort "DOCKERHUB_USERNAME is not configured" if dockerhub.empty? && ENV.fetch("PUBLISH") == "true"
+          dockerhub = "validation" if dockerhub.empty?
           puts "image_tag=#{version}-v#{revision}"
           puts "ghcr_image=ghcr.io/#{ENV.fetch("GITHUB_REPOSITORY_OWNER").downcase}/#{name}:#{version}-v#{revision}"
           puts "dockerhub_image=docker.io/#{dockerhub}/#{name}:#{version}-v#{revision}"
@@ -118,6 +124,7 @@ jobs:
           docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Log in to GHCR
+        if: inputs.publish
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -125,12 +132,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
+        if: inputs.publish
         uses: docker/login-action@v4
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and publish
+        if: inputs.publish
         uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.context }}
@@ -148,7 +157,11 @@ jobs:
       - name: Summary
         run: |
           {
-            echo "## MCP image published"
+            if [ "${{ inputs.publish }}" = "true" ]; then
+              echo "## MCP image published"
+            else
+              echo "## MCP image candidate validated"
+            fi
             echo "- Tag: \`${{ steps.meta.outputs.image_tag }}\`"
             echo "- GHCR: \`${{ steps.meta.outputs.ghcr_image }}\`"
             echo "- Docker Hub: \`${{ steps.meta.outputs.dockerhub_image }}\`"

@@ -9,6 +9,13 @@ on:
       - images/agentmemory-mcp/iii-config.yaml
       - .github/workflows/build-iii-engine.yml
       - .github/workflows/build-image.yml
+  pull_request:
+    paths:
+      - images/iii-engine/**
+      - images/agentmemory-mcp/Dockerfile.iii-engine
+      - images/agentmemory-mcp/iii-config.yaml
+      - .github/workflows/build-iii-engine.yml
+      - .github/workflows/build-image.yml
   schedule:
     - cron: "37 4 * * 1"
   workflow_dispatch:
@@ -31,3 +38,4 @@ jobs:
       config: images/iii-engine/image.yaml
       version_arg: III_VERSION
       smoke_command: --version
+      publish: ${{ github.event_name != 'pull_request' }}

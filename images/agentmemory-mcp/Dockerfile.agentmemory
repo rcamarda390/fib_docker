@@ -1,13 +1,10 @@
 FROM node:22-bookworm-slim AS npm-install
 ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v4
-ARG NPM_CONFIG_STRICT_SSL=true
-ARG NODE_TLS_REJECT_UNAUTHORIZED=1
 WORKDIR /opt/agentmemory
-RUN printf '{"name":"agentmemory-image","private":true,"overrides":{"protobufjs":">=7.5.5","lodash":">=4.18.0"}}\n' > package.json \
- && npm config set strict-ssl "$NPM_CONFIG_STRICT_SSL" \
- && NODE_TLS_REJECT_UNAUTHORIZED="$NODE_TLS_REJECT_UNAUTHORIZED" npm install "@agentmemory/agentmemory@${AGENTMEMORY_VERSION}" "@xenova/transformers@2.17.2" "onnxruntime-node@1.14.0" --no-fund --no-audit \
- && npm shrinkwrap
+COPY package.json package-lock.json ./
+RUN npm ci --no-fund \
+ && test "$(node -p "require('./package.json').dependencies['@agentmemory/agentmemory']")" = "$AGENTMEMORY_VERSION"
 
 FROM npm-install AS model-cache
 ENV XENOVA_CACHE_DIR=/opt/agentmemory/model-cache
@@ -28,7 +25,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/agentmemory
 COPY --from=npm-install /opt/agentmemory/package.json ./package.json
-COPY --from=npm-install /opt/agentmemory/npm-shrinkwrap.json ./npm-shrinkwrap.json
+COPY --from=npm-install /opt/agentmemory/package-lock.json ./package-lock.json
 COPY --from=npm-install /opt/agentmemory/node_modules ./node_modules
 COPY --from=model-cache /opt/agentmemory/model-cache ./model-cache
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
