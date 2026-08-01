@@ -1,4 +1,4 @@
-name: build-iii-engine
+name: Build and publish iii-engine MCP image
 
 on:
   push:
@@ -25,7 +25,8 @@ permissions:
   packages: write
 
 jobs:
-  build:
+  build-iii-engine-image:
+    name: Build and publish iii-engine MCP image
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:

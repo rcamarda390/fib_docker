@@ -1,4 +1,4 @@
-name: Build and publish MCP image
+name: Build, smoke-test, and publish the configured MCP image
 
 on:
   workflow_call:
@@ -33,6 +33,14 @@ on:
         required: false
         default: true
         type: boolean
+      publish_ghcr:
+        required: false
+        default: true
+        type: boolean
+      publish_dockerhub:
+        required: false
+        default: true
+        type: boolean
     outputs:
       image_tag:
         description: Versioned image tag
@@ -50,6 +58,7 @@ permissions:
 
 jobs:
   build:
+    name: Build, smoke-test, and publish the configured MCP image
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -68,6 +77,8 @@ jobs:
           VERSION_ARG: ${{ inputs.version_arg }}
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           PUBLISH: ${{ inputs.publish }}
+          PUBLISH_GHCR: ${{ inputs.publish_ghcr }}
+          PUBLISH_DOCKERHUB: ${{ inputs.publish_dockerhub }}
         shell: bash
         run: |
           set -euo pipefail
@@ -82,9 +93,12 @@ jobs:
           abort "revision must be an integer" unless revision.match?(/\A[0-9]+\z/)
           publish = config.fetch("publish")
           abort "latest must be false for MCP images" if publish.fetch("latest", false)
-          abort "both registries must be enabled" unless publish.fetch("ghcr") && publish.fetch("dockerhub")
+          publish_ghcr = ENV.fetch("PUBLISH_GHCR") == "true"
+          publish_dockerhub = ENV.fetch("PUBLISH_DOCKERHUB") == "true"
+          abort "GHCR publication is not enabled" if publish_ghcr && !publish.fetch("ghcr", false)
+          abort "Docker Hub publication is not enabled" if publish_dockerhub && !publish.fetch("dockerhub", false)
           dockerhub = ARGV[3]
-          abort "DOCKERHUB_USERNAME is not configured" if dockerhub.empty? && ENV.fetch("PUBLISH") == "true"
+          abort "DOCKERHUB_USERNAME is not configured" if dockerhub.empty? && ENV.fetch("PUBLISH") == "true" && publish_dockerhub
           dockerhub = "validation" if dockerhub.empty?
           puts "image_tag=#{version}-v#{revision}"
           puts "ghcr_image=ghcr.io/#{ENV.fetch("GITHUB_REPOSITORY_OWNER").downcase}/#{name}:#{version}-v#{revision}"
@@ -96,6 +110,10 @@ jobs:
             puts "#{key}=#{value}"
           end
           puts "BUILD_ARGS"
+          puts "publish_tags<<PUBLISH_TAGS"
+          puts "ghcr.io/#{ENV.fetch("GITHUB_REPOSITORY_OWNER").downcase}/#{name}:#{version}-v#{revision}" if publish_ghcr
+          puts "docker.io/#{dockerhub}/#{name}:#{version}-v#{revision}" if publish_dockerhub
+          puts "PUBLISH_TAGS"
           RUBY
 
       - name: Set up Docker Buildx
@@ -124,7 +142,7 @@ jobs:
           docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Log in to GHCR
-        if: inputs.publish
+        if: inputs.publish && inputs.publish_ghcr
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -132,14 +150,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: inputs.publish
+        if: inputs.publish && inputs.publish_dockerhub
         uses: docker/login-action@v4
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and publish
-        if: inputs.publish
+      - name: Build and push selected registry tags
+        if: inputs.publish && (inputs.publish_ghcr || inputs.publish_dockerhub)
         uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.context }}
@@ -151,14 +169,13 @@ jobs:
             ${{ inputs.version_arg }}=${{ steps.meta.outputs.upstream_version }}
             ${{ steps.meta.outputs.build_args }}
           tags: |
-            ${{ steps.meta.outputs.ghcr_image }}
-            ${{ steps.meta.outputs.dockerhub_image }}
+            ${{ steps.meta.outputs.publish_tags }}
 
       - name: Summary
         run: |
           {
-            if [ "${{ inputs.publish }}" = "true" ]; then
-              echo "## MCP image published"
+            if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.publish_ghcr }}" = "true" -o "${{ inputs.publish_dockerhub }}" = "true" ]; then
+              echo "## MCP image published to selected registries"
             else
               echo "## MCP image candidate validated"
             fi

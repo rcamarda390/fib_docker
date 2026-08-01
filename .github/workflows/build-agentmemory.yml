@@ -1,4 +1,4 @@
-name: build-agentmemory
+name: Build and publish agentmemory MCP image
 
 on:
   push:
@@ -23,7 +23,8 @@ permissions:
   packages: write
 
 jobs:
-  build:
+  build-agentmemory-image:
+    name: Build and publish agentmemory MCP image
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
