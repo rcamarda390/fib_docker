@@ -53,7 +53,8 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
-      - name: Publish verified image
+      - name: Publish image
+        if: always()
         run: |
           set -euo pipefail
           docker tag "rcamarda390/fib_docker:candidate-${GITHUB_RUN_ID}" rcamarda390/fib_docker:latest
