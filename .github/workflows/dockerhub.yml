@@ -22,38 +22,44 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push
+      - name: Build candidate image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
-          tags: |
-            rcamarda390/fib_docker:latest
-            rcamarda390/fib_docker:build-${{ github.run_number }}
+          load: true
+          tags: rcamarda390/fib_docker:candidate-${{ github.run_id }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: rcamarda390/fib_docker:build-${{ github.run_number }}
+          image-ref: rcamarda390/fib_docker:candidate-${{ github.run_id }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
           category: 'trivy'
 
       - name: Run Trivy scan and fail on vulnerabilities
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: rcamarda390/fib_docker:build-${{ github.run_number }}
+          image-ref: rcamarda390/fib_docker:candidate-${{ github.run_id }}
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+
+      - name: Publish verified image
+        run: |
+          set -euo pipefail
+          docker tag "rcamarda390/fib_docker:candidate-${GITHUB_RUN_ID}" rcamarda390/fib_docker:latest
+          docker tag "rcamarda390/fib_docker:candidate-${GITHUB_RUN_ID}" "rcamarda390/fib_docker:build-${GITHUB_RUN_NUMBER}"
+          docker push rcamarda390/fib_docker:latest
+          docker push "rcamarda390/fib_docker:build-${GITHUB_RUN_NUMBER}"
 
   docker-scout:
     runs-on: ubuntu-latest
