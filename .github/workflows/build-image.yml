@@ -54,7 +54,7 @@ jobs:
       dockerhub_image: ${{ steps.meta.outputs.dockerhub_image }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Read image metadata
         id: meta
