@@ -74,7 +74,7 @@ RUN apt-get update \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
     && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
     && rm -rf /var/lib/apt/lists/* \
-    && dpkg --purge --force-depends --force-remove-essential \
+    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
         bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
         libuuid1 ncurses-base util-linux libacl1 liblastlog2-2 ncurses-bin libmount1 login
 
