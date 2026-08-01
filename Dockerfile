@@ -55,7 +55,6 @@ RUN set -eux; \
         sqlfluff \
         autopep8; \
     python -m pip show msgpack setuptools; \
-    python -c "from importlib.metadata import distributions; print([(d.metadata['Name'], d.version, str(d.locate_file(''))) for d in distributions() if d.metadata['Name'].lower() in ('msgpack', 'setuptools')] )"; \
     pip check
 
 # ============================================================
