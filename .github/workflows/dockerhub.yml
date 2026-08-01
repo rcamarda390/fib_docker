@@ -58,9 +58,9 @@ jobs:
         run: |
           set -euo pipefail
           docker tag "rcamarda390/fib_docker:candidate-${GITHUB_RUN_ID}" rcamarda390/fib_docker:latest
-          docker tag "rcamarda390/fib_docker:candidate-${GITHUB_RUN_ID}" "rcamarda390/fib_docker:build-${GITHUB_RUN_NUMBER}"
+          docker tag "rcamarda390/fib_docker:candidate-${GITHUB_RUN_ID}" "rcamarda390/fib_docker:v${GITHUB_RUN_NUMBER}"
           docker push rcamarda390/fib_docker:latest
-          docker push "rcamarda390/fib_docker:build-${GITHUB_RUN_NUMBER}"
+          docker push "rcamarda390/fib_docker:v${GITHUB_RUN_NUMBER}"
 
   docker-scout:
     runs-on: ubuntu-latest
