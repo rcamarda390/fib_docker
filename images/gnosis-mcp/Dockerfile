@@ -96,13 +96,15 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${GNOSIS_MCP_PORT}/health" || exit 1
 
-LABEL org.opencontainers.image.title="gnosis-mcp-airgap" \
+ARG GNOSIS_VERSION=0.13.3
+ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
+LABEL org.opencontainers.image.title="gnosis-mcp" \
       org.opencontainers.image.description="Self-hosted MCP docs server — air-gap variant, ONNX model pre-bundled." \
       org.opencontainers.image.source="https://github.com/nicholasglazer/gnosis-mcp" \
       org.opencontainers.image.licenses="MIT" \
       gnosis.airgap="true" \
-      gnosis.embed-model="MongoDB/mdbr-leaf-ir" \
-      gnosis.gnosis-version="0.13.3" \
+      gnosis.embed-model="${EMBED_MODEL}" \
+      gnosis.gnosis-version="${GNOSIS_VERSION}" \
       gnosis.patch="rest.py-combined-lifespan" \
       gnosis.image-version="v9"
 

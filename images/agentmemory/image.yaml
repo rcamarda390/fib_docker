@@ -1,0 +1,8 @@
+name: agentmemory
+upstream_version: 0.9.28
+revision: 4
+build_args: {}
+publish:
+  ghcr: true
+  dockerhub: true
+  latest: false

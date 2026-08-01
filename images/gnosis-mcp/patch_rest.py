@@ -1,6 +1,8 @@
 import pathlib
 
-path = pathlib.Path("/install/lib/python3.12/site-packages/gnosis_mcp/rest.py")
+matches = list(pathlib.Path("/install/lib").glob("python*/site-packages/gnosis_mcp/rest.py"))
+assert len(matches) == 1, f"PATCH FAILED: expected one rest.py, found {len(matches)}"
+path = matches[0]
 src = path.read_text()
 
 old = '    app = Starlette(routes=routes, lifespan=_make_lifespan(config))'

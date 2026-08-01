@@ -1,0 +1,126 @@
+name: Build and publish MCP image
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      context:
+        required: true
+        type: string
+      dockerfile:
+        required: true
+        type: string
+      config:
+        required: true
+        type: string
+      version_arg:
+        required: true
+        type: string
+      platforms:
+        required: false
+        default: linux/amd64,linux/arm64
+        type: string
+    outputs:
+      image_tag:
+        description: Versioned image tag
+        value: ${{ jobs.build.outputs.image_tag }}
+      ghcr_image:
+        description: GHCR image reference
+        value: ${{ jobs.build.outputs.ghcr_image }}
+      dockerhub_image:
+        description: Docker Hub image reference
+        value: ${{ jobs.build.outputs.dockerhub_image }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      ghcr_image: ${{ steps.meta.outputs.ghcr_image }}
+      dockerhub_image: ${{ steps.meta.outputs.dockerhub_image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read image metadata
+        id: meta
+        env:
+          CONFIG: ${{ inputs.config }}
+          INPUT_IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION_ARG: ${{ inputs.version_arg }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby - "$CONFIG" "$INPUT_IMAGE_NAME" "$VERSION_ARG" "$DOCKERHUB_USERNAME" <<'RUBY' >> "$GITHUB_OUTPUT"
+          require "yaml"
+          config = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false)
+          name = config.fetch("name")
+          abort "image name does not match caller input" unless name == ARGV[1]
+          abort "image name must be lowercase" unless name == name.downcase && name.match?(/\A[a-z0-9][a-z0-9.-]*\z/)
+          version = config.fetch("upstream_version").to_s
+          revision = config.fetch("revision").to_s
+          abort "revision must be an integer" unless revision.match?(/\A[0-9]+\z/)
+          publish = config.fetch("publish")
+          abort "latest must be false for MCP images" if publish.fetch("latest", false)
+          abort "both registries must be enabled" unless publish.fetch("ghcr") && publish.fetch("dockerhub")
+          dockerhub = ARGV[3]
+          abort "DOCKERHUB_USERNAME is not configured" if dockerhub.empty?
+          puts "image_tag=#{version}-v#{revision}"
+          puts "ghcr_image=ghcr.io/#{ENV.fetch("GITHUB_REPOSITORY_OWNER").downcase}/#{name}:#{version}-v#{revision}"
+          puts "dockerhub_image=docker.io/#{dockerhub}/#{name}:#{version}-v#{revision}"
+          puts "upstream_version=#{version}"
+          puts "build_args<<BUILD_ARGS"
+          (config["build_args"] || {}).each do |key, value|
+            abort "build_args values must be strings" unless value.is_a?(String)
+            puts "#{key}=#{value}"
+          end
+          puts "BUILD_ARGS"
+          RUBY
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          provenance: false
+          build-args: |
+            ${{ inputs.version_arg }}=${{ steps.meta.outputs.upstream_version }}
+            ${{ steps.meta.outputs.build_args }}
+          tags: |
+            ${{ steps.meta.outputs.ghcr_image }}
+            ${{ steps.meta.outputs.dockerhub_image }}
+
+      - name: Summary
+        run: |
+          {
+            echo "## MCP image published"
+            echo "- Tag: \`${{ steps.meta.outputs.image_tag }}\`"
+            echo "- GHCR: \`${{ steps.meta.outputs.ghcr_image }}\`"
+            echo "- Docker Hub: \`${{ steps.meta.outputs.dockerhub_image }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
