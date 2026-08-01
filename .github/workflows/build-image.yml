@@ -1,4 +1,4 @@
-name: Build and publish MCP image
+name: Build, smoke-test, and publish the configured MCP image
 
 on:
   workflow_call:
@@ -50,6 +50,7 @@ permissions:
 
 jobs:
   build:
+    name: Build, smoke-test, and publish the configured MCP image
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
