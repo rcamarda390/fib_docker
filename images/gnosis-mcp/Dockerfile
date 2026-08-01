@@ -71,12 +71,12 @@ FROM python:${PYTHON_VERSION}-slim AS runtime
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends libgomp1 \
+    && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
+    && rm -rf /var/lib/apt/lists/* \
     && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
     && dpkg --purge --force-depends --force-remove-essential \
         bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
-        libuuid1 ncurses-base util-linux \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis
+        libuuid1 ncurses-base util-linux libacl1 liblastlog2-2 ncurses-bin
 
 COPY --from=builder /install             /usr/local
 COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
