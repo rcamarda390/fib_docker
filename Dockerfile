@@ -55,7 +55,6 @@ RUN set -eux; \
         sqlfluff \
         autopep8; \
     python -m pip show msgpack setuptools; \
-    find /usr -type d \( -name 'msgpack-*.dist-info' -o -name 'setuptools-*.dist-info' \) -print; \
     pip check
 
 # ============================================================
