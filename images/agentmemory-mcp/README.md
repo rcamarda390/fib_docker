@@ -13,10 +13,10 @@ published to both GHCR and Docker Hub; no floating tags are published.
 The builds are driven by the individual workflows
 `build-agentmemory.yml` and `build-iii-engine.yml`, which call the shared
 `build-image.yml` workflow. Smoke tests stay in those individual callers.
-For a coordinated manual build of both images, use
-`build-agentmemory-both.yml`; its `push_ghcr` and `push_dockerhub` inputs
-independently control publication, and leaving both unchecked only validates
-the image candidates.
+For a coordinated manual build, use `build-mcp-images.yml` to select
+`agentmemory`, `iii-engine`, or `both`. Its `push_ghcr` and `push_dockerhub`
+inputs independently control publication, and leaving both unchecked only
+validates the image candidates.
 
 `gnosis-mcp` is maintained separately in [`../gnosis-mcp`](../gnosis-mcp). It
 is currently the air-gap build, with its model pre-bundled and its air-gap

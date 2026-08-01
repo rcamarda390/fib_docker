@@ -1,15 +1,24 @@
-name: Build both agentmemory MCP images
+name: Build selected MCP images
 
 on:
   workflow_dispatch:
     inputs:
+      image:
+        description: Image build target
+        required: true
+        default: both
+        type: choice
+        options:
+          - agentmemory
+          - iii-engine
+          - both
       push_ghcr:
-        description: Push both images to GitHub Container Registry
+        description: Push selected images to GitHub Container Registry
         required: true
         default: false
         type: boolean
       push_dockerhub:
-        description: Push both images to Docker Hub
+        description: Push selected images to Docker Hub
         required: true
         default: false
         type: boolean
@@ -20,6 +29,7 @@ permissions:
 
 jobs:
   build-agentmemory:
+    if: inputs.image == 'agentmemory' || inputs.image == 'both'
     name: Build agentmemory MCP image
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
@@ -41,6 +51,7 @@ jobs:
       publish_dockerhub: ${{ inputs.push_dockerhub }}
 
   build-iii-engine:
+    if: inputs.image == 'iii-engine' || inputs.image == 'both'
     name: Build iii-engine MCP image
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
