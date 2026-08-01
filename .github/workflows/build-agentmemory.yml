@@ -8,6 +8,8 @@ on:
       - images/agentmemory-mcp/**
       - .github/workflows/build-agentmemory.yml
       - .github/workflows/build-image.yml
+  schedule:
+    - cron: "9 5 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -27,18 +29,8 @@ jobs:
       dockerfile: ./images/agentmemory-mcp/Dockerfile.agentmemory
       config: images/agentmemory/image.yaml
       version_arg: AGENTMEMORY_VERSION
-
-  smoke-test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Smoke test
-        env:
-          IMAGE: docker.io/${{ vars.DOCKERHUB_USERNAME }}/agentmemory:${{ needs.build.outputs.image_tag }}
-        run: |
-          docker pull "$IMAGE"
-          docker run --rm \
-            -e III_ENGINE_URL=ws://localhost:49134 \
-            -e TRANSFORMERS_OFFLINE=1 \
-            -e HF_HUB_OFFLINE=1 \
-            "$IMAGE" node -e "console.log('agentmemory image OK')"
+      smoke_env: >-
+        -e III_ENGINE_URL=ws://localhost:49134
+        -e TRANSFORMERS_OFFLINE=1
+        -e HF_HUB_OFFLINE=1
+      smoke_command: 'node,-e,console.log("agentmemory image OK")'
