@@ -172,6 +172,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push selected registry tags
+        id: publish
         if: inputs.publish && (inputs.publish_ghcr || inputs.publish_dockerhub)
         uses: docker/build-push-action@v7
         with:
@@ -187,14 +188,34 @@ jobs:
             ${{ steps.meta.outputs.publish_tags }}
 
       - name: Summary
+        env:
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          GHCR_IMAGE: ${{ steps.meta.outputs.ghcr_image }}
+          DOCKERHUB_IMAGE: ${{ steps.meta.outputs.dockerhub_image }}
+          PUBLISH: ${{ inputs.publish }}
+          PUBLISH_GHCR: ${{ inputs.publish_ghcr }}
+          PUBLISH_DOCKERHUB: ${{ inputs.publish_dockerhub }}
         run: |
           {
-            if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.publish_ghcr }}" = "true" -o "${{ inputs.publish_dockerhub }}" = "true" ]; then
-              echo "## MCP image published to selected registries"
+            if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_GHCR" = "true" -o "$PUBLISH_DOCKERHUB" = "true" ]; then
+              echo "## MCP image published"
+              echo "The build completed and pushed these exact image references:"
+              if [ "$PUBLISH_GHCR" = "true" ]; then
+                echo "- GHCR: \`$GHCR_IMAGE\`"
+              fi
+              if [ "$PUBLISH_DOCKERHUB" = "true" ]; then
+                echo "- Docker Hub: \`$DOCKERHUB_IMAGE\`"
+              fi
             else
-              echo "## MCP image candidate validated"
+              echo "## MCP image candidate validated (not published)"
+              echo "No registry push was performed."
             fi
-            echo "- Tag: \`${{ steps.meta.outputs.image_tag }}\`"
-            echo "- GHCR: \`${{ steps.meta.outputs.ghcr_image }}\`"
-            echo "- Docker Hub: \`${{ steps.meta.outputs.dockerhub_image }}\`"
+            echo "- Versioned tag: \`$IMAGE_TAG\`"
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "MCP image versioned tag: $IMAGE_TAG"
+          if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_GHCR" = "true" ]; then
+            echo "Pushed to GHCR: $GHCR_IMAGE"
+          fi
+          if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_DOCKERHUB" = "true" ]; then
+            echo "Pushed to Docker Hub: $DOCKERHUB_IMAGE"
+          fi
