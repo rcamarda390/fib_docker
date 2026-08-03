@@ -2,7 +2,7 @@
 # =============================================================================
 # gnosis-mcp — air-gap variant (v9)
 # =============================================================================
-# Patch: gnosis-mcp 0.13.3 rest.py does not wire session_manager.run() into
+# Patch: gnosis-mcp 0.14.0 rest.py does not wire session_manager.run() into
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
@@ -29,12 +29,13 @@ RUN apt-get update \
 
 WORKDIR /build
 
-ARG GNOSIS_VERSION=0.13.3
+ARG GNOSIS_VERSION=0.14.0
 ARG EXTRAS="embeddings"
 COPY requirements.lock /build/requirements.lock
 RUN test "$EXTRAS" = "embeddings" \
-    && grep -q "^gnosis-mcp==${GNOSIS_VERSION} " /build/requirements.lock \
-    && pip install --require-hashes --prefix=/install -r /build/requirements.lock
+    && grep -q "^gnosis-mcp\[embeddings\] @ " /build/requirements.lock \
+    && pip install --require-hashes --prefix=/install -r /build/requirements.lock \
+    && test "$(PYTHONPATH=/install python -c 'import importlib.metadata; print(importlib.metadata.version("gnosis-mcp"))')" = "$GNOSIS_VERSION"
 
 # Patch rest.py — replace the single-lifespan Starlette construction with a
 # combined lifespan that also runs session_manager for StreamableHTTP.
@@ -103,7 +104,7 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % __import__('os').environ['GNOSIS_MCP_PORT'])" || exit 1
 
-ARG GNOSIS_VERSION=0.13.3
+ARG GNOSIS_VERSION=0.14.0
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
 LABEL org.opencontainers.image.title="gnosis-mcp" \
       org.opencontainers.image.description="Self-hosted MCP docs server — air-gap variant, ONNX model pre-bundled." \
