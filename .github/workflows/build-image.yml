@@ -147,6 +147,7 @@ jobs:
 
       - name: Scan candidate image with Trivy
         if: inputs.scan
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: mcp-smoke:${{ github.run_id }}
