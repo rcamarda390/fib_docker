@@ -6,9 +6,10 @@
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
-# Security: Python bumped to 3.13 (CVE-2026-6100); apt-get upgrade applied in
-# both stages to patch perl-base (CVE-2026-42496 +4), libc-bin (CVE-2026-5450),
-# curl (CVE-2026-8927/8926/9079), and libcurl4t64 (CVE-2026-11856/8924/10536).
+# Security: Python bumped to 3.13 (CVE-2026-6100); apt-get upgrade is applied in
+# both stages to consume available Debian security updates. Debian Trixie does
+# not yet ship a glibc fix for CVE-2026-5450; the release workflow therefore
+# blocks publication while Trivy reports this critical libc6/libc-bin finding.
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13

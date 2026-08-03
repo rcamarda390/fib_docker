@@ -45,6 +45,10 @@ on:
         required: false
         default: false
         type: boolean
+      block_on_scan_failure:
+        required: false
+        default: false
+        type: boolean
       auto_increment_revision:
         required: false
         default: false
@@ -179,7 +183,7 @@ jobs:
 
       - name: Scan candidate image with Trivy
         if: inputs.scan
-        continue-on-error: true
+        continue-on-error: ${{ !inputs.block_on_scan_failure }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: mcp-smoke:${{ github.run_id }}
