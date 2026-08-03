@@ -7,8 +7,9 @@
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
 # Security: Python bumped to 3.13 (CVE-2026-6100); apt-get upgrade is applied in
-# both stages to consume available Debian security updates. Bookworm avoids the
-# currently unpatched Trixie libc6/libc-bin findings reported by Trivy.
+# both stages to consume available Debian security updates. Debian Trixie does
+# not yet ship a glibc fix for CVE-2026-5450; publication is blocked while
+# Trivy reports this critical libc6/libc-bin finding.
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13
@@ -16,7 +17,7 @@ ARG PYTHON_VERSION=3.13
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -68,13 +69,13 @@ RUN set -e; \
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
+FROM python:${PYTHON_VERSION}-slim AS runtime
 
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends libgomp1 \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
-    && apt-get purge -y --auto-remove --allow-remove-essential perl-base \
+    && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
         bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
