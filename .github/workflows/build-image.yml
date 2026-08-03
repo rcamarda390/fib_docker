@@ -80,6 +80,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
 
       - name: Increment published image revision
         if: inputs.auto_increment_revision && inputs.publish && (inputs.publish_ghcr || inputs.publish_dockerhub) && github.event_name != 'pull_request'
@@ -95,7 +97,13 @@ jobs:
             revision_count=$(grep -Ec '^revision:[[:space:]]*[0-9]+[[:space:]]*$' "$CONFIG")
             test "$revision_count" -eq 1
             current_revision=$(sed -nE 's/^revision:[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' "$CONFIG")
-            next_revision=$((current_revision + 1))
+            current_version=$(sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' "$CONFIG")
+            previous_version=$(git show "HEAD^:$CONFIG" 2>/dev/null | sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' || true)
+            if test -n "$previous_version" && test "$previous_version" != "$current_version"; then
+              next_revision=1
+            else
+              next_revision=$((current_revision + 1))
+            fi
             sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
             git add "$CONFIG"
             git commit -m "chore: increment MCP image revision [skip ci]" \
