@@ -45,6 +45,10 @@ on:
         required: false
         default: false
         type: boolean
+      auto_increment_revision:
+        required: false
+        default: false
+        type: boolean
     outputs:
       image_tag:
         description: Versioned image tag
@@ -57,7 +61,7 @@ on:
         value: ${{ jobs.build.outputs.dockerhub_image }}
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -72,6 +76,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Increment published image revision
+        if: inputs.auto_increment_revision && inputs.publish && (inputs.publish_ghcr || inputs.publish_dockerhub) && github.event_name != 'pull_request'
+        env:
+          CONFIG: ${{ inputs.config }}
+          BRANCH: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            revision_count=$(grep -Ec '^revision:[[:space:]]*[0-9]+[[:space:]]*$' "$CONFIG")
+            test "$revision_count" -eq 1
+            current_revision=$(sed -nE 's/^revision:[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' "$CONFIG")
+            next_revision=$((current_revision + 1))
+            sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
+            git add "$CONFIG"
+            git commit -m "chore: increment MCP image revision [skip ci]" \
+              -m "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
+            if git push origin "HEAD:$BRANCH"; then
+              exit 0
+            fi
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+          done
+          echo "Unable to publish the revision update after retries" >&2
+          exit 1
 
       - name: Read image metadata
         id: meta

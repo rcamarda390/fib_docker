@@ -7,8 +7,9 @@ tag in both registries:
 - `docker.io/rcamarda390/<image>:<upstream-version>-v<revision>`
 
 The current images are `agentmemory`, `iii-engine`, and `gnosis-mcp`. Their
-metadata and revisions are human-edited in `images/<image>/image.yaml`.
-Workflows read those files; they do not increment, commit, or push revisions.
+metadata is human-edited in `images/<image>/image.yaml`. Published
+`agentmemory` and `iii-engine` builds automatically increment and commit the
+image revision; pull request validation builds do not consume revisions.
 Image-specific Docker build arguments are also defined there.
 
 `gnosis-mcp` currently means the air-gap build: its ONNX embedding model is

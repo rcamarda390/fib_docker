@@ -7,10 +7,10 @@ Edit the appropriate `image.yaml` file before building:
 - `../agentmemory/image.yaml`
 - `../iii-engine/image.yaml`
 
-Set `upstream_version` and increment `revision` manually for each published
-image revision. The workflows only read these values; they never modify
-tracked files or push commits back to the repository. Additional Dockerfile
-arguments belong in the `build_args` map.
+Set `upstream_version` when changing the upstream release. Published image
+builds increment and commit `revision` automatically; pull request validation
+builds do not consume revisions. Additional Dockerfile arguments belong in the
+`build_args` map.
 
 The npm dependency graph is reviewed in `package-lock.json`; update
 `package.json` and regenerate the lockfile before changing application

@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: read
+      contents: write
       packages: write
     with:
       image_name: agentmemory
@@ -42,4 +42,5 @@ jobs:
         -e HF_HUB_OFFLINE=1
       smoke_command: 'node,-e,console.log("agentmemory image OK")'
       scan: true
+      auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}
