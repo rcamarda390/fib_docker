@@ -80,6 +80,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
 
       - name: Increment published image revision
         if: inputs.auto_increment_revision && inputs.publish && (inputs.publish_ghcr || inputs.publish_dockerhub) && github.event_name != 'pull_request'
