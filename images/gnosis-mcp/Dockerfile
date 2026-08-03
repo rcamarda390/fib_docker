@@ -35,7 +35,8 @@ COPY requirements.lock /build/requirements.lock
 RUN test "$EXTRAS" = "embeddings" \
     && grep -q "^gnosis-mcp\[embeddings\] @ " /build/requirements.lock \
     && pip install --require-hashes --prefix=/install -r /build/requirements.lock \
-    && test "$(PYTHONPATH=/install python -c 'import importlib.metadata; print(importlib.metadata.version("gnosis-mcp"))')" = "$GNOSIS_VERSION"
+    && SITE_PACKAGES="$(find /install/lib -type d -name site-packages -print -quit)" \
+    && test "$(PYTHONPATH="$SITE_PACKAGES" python -c 'import importlib.metadata; print(importlib.metadata.version("gnosis-mcp"))')" = "$GNOSIS_VERSION"
 
 # Patch rest.py — replace the single-lifespan Starlette construction with a
 # combined lifespan that also runs session_manager for StreamableHTTP.
