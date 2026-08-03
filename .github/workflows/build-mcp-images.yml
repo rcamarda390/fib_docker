@@ -24,7 +24,7 @@ on:
         type: boolean
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: read
+      contents: write
       packages: write
     with:
       image_name: agentmemory
@@ -42,6 +42,7 @@ jobs:
       dockerfile: ./images/agentmemory-mcp/Dockerfile.agentmemory
       config: images/agentmemory/image.yaml
       version_arg: AGENTMEMORY_VERSION
+      auto_increment_revision: true
       smoke_env: >-
         -e III_ENGINE_URL=ws://localhost:49134
         -e TRANSFORMERS_OFFLINE=1
@@ -56,7 +57,7 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: read
+      contents: write
       packages: write
     with:
       image_name: iii-engine
@@ -65,5 +66,6 @@ jobs:
       config: images/iii-engine/image.yaml
       version_arg: III_VERSION
       smoke_command: --version
+      auto_increment_revision: true
       publish_ghcr: ${{ inputs.push_ghcr }}
       publish_dockerhub: ${{ inputs.push_dockerhub }}

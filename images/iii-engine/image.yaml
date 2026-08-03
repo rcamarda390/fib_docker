@@ -1,6 +1,6 @@
 name: iii-engine
 upstream_version: 0.22.0
-revision: 9
+revision: 10
 build_args: {}
 publish:
   ghcr: true

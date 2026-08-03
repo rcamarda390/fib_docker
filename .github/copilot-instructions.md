@@ -12,8 +12,8 @@ This repository builds and publishes versioned Docker images for MCP services:
    existing documentation before editing.
 2. Work from the repository default branch (`main`) on a dedicated feature branch.
    Keep changes surgical and do not revert unrelated user changes.
-3. Preserve existing image names, registry destinations, tag formats, and manual
-   revision ownership unless the task explicitly changes the release contract.
+3. Preserve existing image names, registry destinations, and tag formats unless
+   the task explicitly changes the release contract.
 4. Validate the smallest relevant existing checks. At minimum run `git diff --check`;
    run YAML/workflow validation, Docker builds, and targeted smoke or integration
    tests when the required tools and daemon are available.
@@ -26,12 +26,14 @@ This repository builds and publishes versioned Docker images for MCP services:
 
 - `images/*/image.yaml` is the source of truth for the image name, upstream version,
   revision, build arguments, and registry publication flags.
-- Increment `revision` deliberately when changing an image build or runtime patch.
+- Published `agentmemory` and `iii-engine` builds automatically increment and
+  commit `revision`; pull request validation builds do not consume revisions.
 - MCP tags use `<upstream_version>-v<revision>` and publish to both GHCR and Docker
   Hub. MCP images do not publish `latest`.
 - The reusable `.github/workflows/build-image.yml` workflow must keep registry
-  credentials and permissions least-privilege. Callers must grant `contents: read`
-  and `packages: write`; Docker Hub uses `vars.DOCKERHUB_USERNAME` and
+  credentials and permissions least-privilege. Auto-incrementing callers grant
+  `contents: write`; read-only callers grant `contents: read`. All callers
+  grant `packages: write`; Docker Hub uses `vars.DOCKERHUB_USERNAME` and
   `secrets.DOCKERHUB_TOKEN`.
 - MCP candidate validation must happen before final registry publication. Prefer
   deterministic, offline-capable startup and protocol checks; do not make CI depend
