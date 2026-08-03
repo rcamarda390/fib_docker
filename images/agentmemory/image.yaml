@@ -1,6 +1,6 @@
 name: agentmemory
 upstream_version: 0.9.28
-revision: 6
+revision: 7
 build_args: {}
 publish:
   ghcr: true
