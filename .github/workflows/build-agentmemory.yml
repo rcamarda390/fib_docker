@@ -41,4 +41,5 @@ jobs:
         -e TRANSFORMERS_OFFLINE=1
         -e HF_HUB_OFFLINE=1
       smoke_command: 'node,-e,console.log("agentmemory image OK")'
+      scan: true
       publish: ${{ github.event_name != 'pull_request' }}
