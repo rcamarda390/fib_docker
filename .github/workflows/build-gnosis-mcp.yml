@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: read
+      contents: write
       packages: write
     with:
       image_name: gnosis-mcp
@@ -37,4 +37,5 @@ jobs:
       smoke_env: -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1
       smoke_command: check
       scan: true
+      auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}
