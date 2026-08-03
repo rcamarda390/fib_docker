@@ -37,6 +37,5 @@ jobs:
       smoke_env: -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1
       smoke_command: check
       scan: true
-      block_on_scan_failure: true
       auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}

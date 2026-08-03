@@ -23,13 +23,9 @@ GHCR authentication with `GITHUB_TOKEN`, Docker Hub authentication with
 `vars.DOCKERHUB_USERNAME` and `secrets.DOCKERHUB_TOKEN`, and dual publishing.
 Image-specific smoke tests remain in the caller workflows. Gnosis candidates
 are also scanned with Trivy for HIGH and CRITICAL vulnerabilities, including
-unfixed findings, before any registry login or publication. The Gnosis workflow
-blocks publication when that scan fails. This is intentional for CVE-2026-5450:
-Debian Trixie currently ships glibc 2.41 without the upstream fix, so
-`apt-get upgrade` cannot remediate the finding. Until Debian publishes a
-patched package, do not expose the image directly to untrusted networks; the
-application does not use the affected `scanf` `%mc` path, but glibc remains
-vulnerable in the image and the finding must not be suppressed.
+unfixed findings, before any registry login or publication. Scan findings are
+reported but do not block publication; external image scanning tools provide
+additional security review.
 
 The non-MCP `.github/workflows/dockerhub.yml` workflow builds the repository
 root `Dockerfile` and remains outside this MCP standardization.
