@@ -7,7 +7,8 @@
     "onnxruntime-node": "1.14.0"
   },
   "overrides": {
-    "protobufjs": "7.5.5",
-    "lodash": "4.17.21"
+    "protobufjs": "7.6.5",
+    "lodash": "4.17.21",
+    "sharp": "0.35.0"
   }
 }
