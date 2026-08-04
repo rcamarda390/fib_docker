@@ -1,0 +1,41 @@
+name: Build and publish bifrost MCP image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/bifrost-mcp/**
+      - .github/workflows/build-bifrost-mcp.yml
+      - .github/workflows/build-image.yml
+  pull_request:
+    paths:
+      - images/bifrost-mcp/**
+      - .github/workflows/build-bifrost-mcp.yml
+      - .github/workflows/build-image.yml
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    name: Build and publish bifrost MCP image
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+    with:
+      image_name: bifrost-mcp
+      context: ./images/bifrost-mcp
+      dockerfile: ./images/bifrost-mcp/Dockerfile
+      config: images/bifrost-mcp/image.yaml
+      version_arg: BIFROST_VERSION
+      platforms: linux/amd64
+      smoke_command: --help
+      scan: true
+      auto_increment_revision: true
+      publish: ${{ github.event_name != 'pull_request' }}
