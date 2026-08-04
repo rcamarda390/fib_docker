@@ -10,3 +10,6 @@ LABEL org.opencontainers.image.title="bifrost-mcp" \
       org.opencontainers.image.source="https://github.com/maximhq/bifrost" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.version="${BIFROST_VERSION}"
+
+ENTRYPOINT ["/app/main"]
+CMD ["-app-dir", "/app/data", "-port", "8080", "-host", "0.0.0.0"]
