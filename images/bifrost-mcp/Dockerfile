@@ -3,7 +3,7 @@
 ARG BIFROST_VERSION=2.0.0-prerelease2
 ARG BIFROST_COMMIT=4a31f776fbe38c7177dea5034f639852d0c1342e
 
-FROM alpine:3.23.4 AS source
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 RUN apk add --no-cache ca-certificates git \
@@ -11,14 +11,14 @@ RUN apk add --no-cache ca-certificates git \
        https://github.com/maximhq/bifrost.git /src \
     && test "$(git -C /src rev-parse HEAD)" = "$BIFROST_COMMIT"
 
-FROM node:25-alpine3.23 AS ui-builder
+FROM node:25-alpine3.23@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS ui-builder
 WORKDIR /app
 COPY --from=source /src/ui/package*.json ./
 RUN npm ci
 COPY --from=source /src/ui/ ./
 RUN npm run build-enterprise
 
-FROM golang:1.26.4-alpine3.23 AS builder
+FROM golang:1.26.4-alpine3.23@sha256:18b460dd17542c2ba43299a633cf6ebfc1115101509531471d7cfce1019af083 AS builder
 WORKDIR /build
 RUN apk add --no-cache gcc musl-dev sqlite-dev binutils binutils-gold
 ENV CGO_ENABLED=1 GOOS=linux
@@ -40,7 +40,7 @@ RUN cd /build/transports \
        -a -trimpath -tags sqlite_static -o /app/main ./bifrost-http \
     && test -f /app/main
 
-FROM alpine:3.23.4
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 WORKDIR /app
