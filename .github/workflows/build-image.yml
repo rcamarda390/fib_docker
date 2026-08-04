@@ -105,6 +105,12 @@ jobs:
               next_revision=$((current_revision + 1))
             fi
             sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
+            if git diff --quiet -- "$CONFIG"; then
+              echo "Revision changed concurrently; refreshing the branch before retrying" >&2
+              git fetch origin "$BRANCH"
+              git reset --hard "origin/$BRANCH"
+              continue
+            fi
             git add "$CONFIG"
             git commit -m "chore: increment MCP image revision [skip ci]" \
               -m "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
