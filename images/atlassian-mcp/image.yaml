@@ -1,6 +1,6 @@
 name: atlassian-mcp
 upstream_version: 0.23.0
-revision: 6
+revision: 7
 build_args: {}
 publish:
   ghcr: true
