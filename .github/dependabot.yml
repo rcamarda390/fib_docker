@@ -16,3 +16,7 @@ updates:
     directory: /images/agentmemory-mcp
     schedule:
       interval: weekly
+  - package-ecosystem: docker
+    directory: /images/bifrost-mcp
+    schedule:
+      interval: weekly
