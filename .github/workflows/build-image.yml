@@ -72,7 +72,7 @@ jobs:
   build:
     name: Build, smoke-test, and publish the configured MCP image
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
       ghcr_image: ${{ steps.meta.outputs.ghcr_image }}
@@ -184,6 +184,8 @@ jobs:
             ${{ inputs.version_arg }}=${{ steps.meta.outputs.upstream_version }}
             ${{ steps.meta.outputs.build_args }}
           tags: mcp-smoke:${{ github.run_id }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Run smoke test
         env:
@@ -236,6 +238,8 @@ jobs:
             ${{ steps.meta.outputs.build_args }}
           tags: |
             ${{ steps.meta.outputs.publish_tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Summary
         env:
