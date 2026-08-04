@@ -1,6 +1,6 @@
 name: bifrost-mcp
 upstream_version: 0.23.0
-revision: 3
+revision: 4
 build_args: {}
 publish:
   ghcr: true
