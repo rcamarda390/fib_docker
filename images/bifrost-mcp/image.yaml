@@ -1,5 +1,5 @@
 name: bifrost-mcp
-upstream_version: 1.6.7
+upstream_version: 2.0.0-prerelease2
 revision: 2
 build_args: {}
 publish:

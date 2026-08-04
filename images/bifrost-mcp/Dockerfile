@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG BIFROST_VERSION=1.6.7
+ARG BIFROST_VERSION=2.0.0-prerelease2
 FROM maximhq/bifrost:v${BIFROST_VERSION}
 
 ARG BIFROST_VERSION
