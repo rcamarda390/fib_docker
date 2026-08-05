@@ -1,6 +1,6 @@
 name: bifrost-mcp
 upstream_version: 2.0.0-prerelease2
-revision: 7
+revision: 8
 build_args:
   BIFROST_COMMIT: 4a31f776fbe38c7177dea5034f639852d0c1342e
 publish:
