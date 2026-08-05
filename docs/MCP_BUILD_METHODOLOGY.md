@@ -7,7 +7,7 @@ tag in both registries:
 - `docker.io/rcamarda390/<image>:<upstream-version>-v<revision>`
 
 The current images are `agentmemory`, `iii-engine`, `gnosis-mcp`,
-`atlassian-mcp`, and `bifrost-mcp`. Their
+`atlassian-mcp`, `bifrost-mcp`, and `sqz-mcp`. Their
 metadata is human-edited in `images/<image>/image.yaml`. Published MCP builds
 automatically increment and commit the image revision. When `upstream_version`
 changes, the revision resets to `1`; pull request validation builds do not
