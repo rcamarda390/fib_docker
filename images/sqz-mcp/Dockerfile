@@ -3,7 +3,7 @@
 ARG SQZ_VERSION=1.3.0
 ARG SQZ_COMMIT=d024b6b6bec152dfa7a63e2316054b1bb33a8110
 
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e688dd4a5019afde11 AS source
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG SQZ_VERSION
 ARG SQZ_COMMIT
 RUN apk add --no-cache ca-certificates git \
