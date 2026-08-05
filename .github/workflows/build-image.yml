@@ -221,7 +221,7 @@ jobs:
               state=$(docker inspect --format "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}" "$0" 2>/dev/null || true)
               case "$state" in
                 "running healthy") exit 0 ;;
-                "running unhealthy"|"exited "*|"dead "*|"") exit 1 ;;
+                "running "|"running unhealthy"|"exited "*|"dead "*|"") exit 1 ;;
               esac
               sleep 1
             done
