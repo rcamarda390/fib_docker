@@ -14,6 +14,10 @@ changes, the revision resets to `1`; pull request validation builds do not
 consume revisions.
 Image-specific Docker build arguments are also defined there.
 
+Image builds are manual: each image caller workflow is triggered only with
+`workflow_dispatch`, so merges, pull requests, and scheduled runs do not build
+or publish images. Run the workflow for the image you want to build.
+
 `gnosis-mcp` currently means the air-gap build: its ONNX embedding model is
 pre-bundled and the image is labeled with `gnosis.airgap=true`. The air-gap
 variant is not represented by a tag suffix. MCP workflows publish versioned

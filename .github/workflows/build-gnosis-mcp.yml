@@ -1,19 +1,6 @@
 name: build-gnosis-mcp
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - images/gnosis-mcp/**
-      - .github/workflows/build-gnosis-mcp.yml
-      - .github/workflows/build-image.yml
-  pull_request:
-    paths:
-      - images/gnosis-mcp/**
-      - .github/workflows/build-gnosis-mcp.yml
-      - .github/workflows/build-image.yml
-  schedule:
-    - cron: "51 4 * * 1"
   workflow_dispatch:
 
 permissions:

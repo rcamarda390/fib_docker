@@ -1,19 +1,6 @@
 name: Build and publish Atlassian MCP image
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - images/atlassian-mcp/**
-      - .github/workflows/build-atlassian-mcp.yml
-      - .github/workflows/build-image.yml
-  pull_request:
-    paths:
-      - images/atlassian-mcp/**
-      - .github/workflows/build-atlassian-mcp.yml
-      - .github/workflows/build-image.yml
-  schedule:
-    - cron: "23 5 * * 1"
   workflow_dispatch:
 
 permissions:

@@ -1,19 +1,6 @@
 name: Build and publish Bifrost MCP image
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - images/bifrost-mcp/**
-      - .github/workflows/build-bifrost-mcp.yml
-      - .github/workflows/build-image.yml
-  pull_request:
-    paths:
-      - images/bifrost-mcp/**
-      - .github/workflows/build-bifrost-mcp.yml
-      - .github/workflows/build-image.yml
-  schedule:
-    - cron: "23 5 * * 1"
   workflow_dispatch:
 
 permissions:
