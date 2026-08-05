@@ -2,6 +2,7 @@
 
 ARG BIFROST_VERSION=2.0.0-prerelease2
 ARG BIFROST_COMMIT=4a31f776fbe38c7177dea5034f639852d0c1342e
+ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
 
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG BIFROST_VERSION
@@ -35,7 +36,11 @@ RUN go work init \
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 
 ARG BIFROST_VERSION
+ARG GO_OPENAPI_VALIDATE_VERSION
 RUN cd /build/transports \
+    && go get "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}" \
+    && go mod tidy \
+    && test "$(go list -m -f '{{.Version}}' github.com/go-openapi/validate)" = "${GO_OPENAPI_VALIDATE_VERSION#v}" \
     && go build -ldflags="-w -s -X main.Version=v${BIFROST_VERSION} -extldflags '-static'" \
        -a -trimpath -tags sqlite_static -o /app/main ./bifrost-http \
     && test -f /app/main
