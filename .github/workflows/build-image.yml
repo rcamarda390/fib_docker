@@ -23,7 +23,8 @@ on:
         default: linux/amd64,linux/arm64
         type: string
       smoke_command:
-        required: true
+        required: false
+        default: ""
         type: string
       smoke_env:
         required: false
@@ -186,6 +187,7 @@ jobs:
           tags: mcp-smoke:${{ github.run_id }}
 
       - name: Run smoke test
+        if: inputs.smoke_command != ''
         env:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
