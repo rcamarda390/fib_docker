@@ -238,7 +238,7 @@ jobs:
           done
 
           if [ "$ok" != "1" ]; then
-            echo "Health endpoint did not become ready within 60 seconds."
+            echo "Health endpoint did not become ready within the polling window."
             exit 1
           fi
           echo "health endpoint OK"
