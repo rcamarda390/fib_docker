@@ -237,7 +237,10 @@ jobs:
             sleep 2
           done
 
-          test "$ok" = "1"
+          if [ "$ok" != "1" ]; then
+            echo "Health endpoint did not become ready within 60 seconds."
+            exit 1
+          fi
           echo "health endpoint OK"
 
       - name: Scan candidate image with Trivy
