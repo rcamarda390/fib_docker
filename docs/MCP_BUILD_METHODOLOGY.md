@@ -14,6 +14,10 @@ changes, the revision resets to `1`; pull request validation builds do not
 consume revisions.
 Image-specific Docker build arguments are also defined there.
 
+The `sqz-mcp` build vendors `images/sqz-mcp/Cargo.lock` because its upstream
+repository does not commit a lockfile. Regenerate that lockfile with
+`cargo generate-lockfile` whenever `SQZ_VERSION` changes.
+
 Image builds are manual: each image caller workflow is triggered only with
 `workflow_dispatch`, so merges, pull requests, and scheduled runs do not build
 or publish images. Run the workflow for the image you want to build.

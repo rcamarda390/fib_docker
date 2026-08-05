@@ -11,10 +11,13 @@ RUN apk add --no-cache ca-certificates git \
        https://github.com/ojuschugh1/sqz.git /src \
     && test "$(git -C /src rev-parse HEAD)" = "$SQZ_COMMIT"
 
-FROM rust:1.82-alpine AS builder
+FROM rust:1.85-alpine AS builder
 WORKDIR /build
 RUN apk add --no-cache musl-dev
 COPY --from=source /src/ .
+# Upstream gitignores its lockfile, so pin the dependency graph ourselves.
+# Regenerate with `cargo generate-lockfile` whenever SQZ_VERSION changes.
+COPY Cargo.lock ./Cargo.lock
 RUN cargo build --release --locked --package sqz-mcp \
     && test -f target/release/sqz-mcp \
     && mkdir -p /app \
