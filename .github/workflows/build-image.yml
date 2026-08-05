@@ -218,9 +218,11 @@ jobs:
           trap cleanup EXIT
           timeout 15 sh -c '
             while :; do
-              status=$(docker inspect --format "{{.State.Health.Status}}" "$0" 2>/dev/null || true)
-              [ "$status" = healthy ] && exit 0
-              [ "$status" = unhealthy ] && exit 1
+              state=$(docker inspect --format "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}" "$0" 2>/dev/null || true)
+              case "$state" in
+                "running healthy") exit 0 ;;
+                "running unhealthy"|"exited "*|"dead "*|"") exit 1 ;;
+              esac
               sleep 1
             done
           ' "$container_id"
