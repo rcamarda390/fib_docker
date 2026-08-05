@@ -34,6 +34,10 @@ on:
         required: false
         default: true
         type: boolean
+      smoke_healthcheck:
+        required: false
+        default: false
+        type: boolean
       publish:
         required: false
         default: true
@@ -201,6 +205,25 @@ jobs:
           set -euo pipefail
           IFS=',' read -r -a SMOKE_ARGS <<< "$SMOKE_COMMAND"
           timeout 15 docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
+
+      - name: Run health smoke test
+        if: inputs.run_smoke_test && inputs.smoke_healthcheck
+        env:
+          IMAGE: mcp-smoke:${{ github.run_id }}
+          SMOKE_ENV: ${{ inputs.smoke_env }}
+        run: |
+          set -euo pipefail
+          container_id=$(docker run -d --rm $SMOKE_ENV "$IMAGE")
+          cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          timeout 15 sh -c '
+            while :; do
+              status=$(docker inspect --format "{{.State.Health.Status}}" "$0" 2>/dev/null || true)
+              [ "$status" = healthy ] && exit 0
+              [ "$status" = unhealthy ] && exit 1
+              sleep 1
+            done
+          ' "$container_id"
 
       - name: Scan candidate image with Trivy
         if: inputs.scan

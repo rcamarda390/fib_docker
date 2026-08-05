@@ -33,14 +33,30 @@ RUN go work init \
        ./plugins/jsonparser ./plugins/logging ./plugins/maxim ./plugins/mocker \
        ./plugins/otel ./plugins/prompts ./plugins/semanticcache \
        ./plugins/telemetry ./transports
+
+# Keep the indirect validator dependency fixed across every workspace module.
+ARG GO_OPENAPI_VALIDATE_VERSION
+RUN set -eux; \
+    for m in core framework plugins/compat plugins/governance plugins/jsonparser \
+             plugins/logging plugins/maxim plugins/mocker plugins/otel plugins/prompts \
+             plugins/semanticcache plugins/telemetry transports; do \
+      if grep -q 'github.com/go-openapi/validate' "$m/go.mod"; then \
+        (cd "$m" && GOWORK=off GOFLAGS=-mod=mod \
+          go get "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}"); \
+      fi; \
+    done; \
+    go work sync
+
+RUN set -eux; \
+    cd /build/transports; \
+    go list -m -f '{{.Path}} {{.Version}}' all \
+      | grep '^github.com/go-openapi/validate ' | tee /tmp/validate-version; \
+    grep -qE "^github.com/go-openapi/validate ${GO_OPENAPI_VALIDATE_VERSION#v}$" /tmp/validate-version
+
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 
 ARG BIFROST_VERSION
-ARG GO_OPENAPI_VALIDATE_VERSION
 RUN cd /build/transports \
-    && go get "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}" \
-    && go mod tidy \
-    && test "$(go list -m -f '{{.Version}}' github.com/go-openapi/validate)" = "${GO_OPENAPI_VALIDATE_VERSION#v}" \
     && go build -ldflags="-w -s -X main.Version=v${BIFROST_VERSION} -extldflags '-static'" \
        -a -trimpath -tags sqlite_static -o /app/main ./bifrost-http \
     && test -f /app/main
@@ -49,6 +65,11 @@ FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 WORKDIR /app
+ENV APP_DIR=/app/data \
+    APP_PORT=8080 \
+    APP_HOST=0.0.0.0 \
+    LOG_LEVEL=info \
+    LOG_STYLE=json
 RUN apk add --no-cache musl libgcc ca-certificates zlib=1.3.2-r0 \
     && adduser -D -s /bin/sh appuser
 COPY --from=builder /app/main .
