@@ -208,27 +208,40 @@ jobs:
 
       - name: Run health smoke test
         if: inputs.smoke_healthcheck
+        timeout-minutes: 5
         env:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
         run: |
           set -euo pipefail
-          container_id=$(docker run -d $SMOKE_ENV "$IMAGE")
-          cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
+          container_id=$(docker run -d $SMOKE_ENV -p 127.0.0.1:8080:8080 "$IMAGE")
+          cleanup() {
+            echo "----- container logs -----"
+            docker logs "$container_id" 2>&1 | tail -100 || true
+            echo "----- container state -----"
+            docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}}' "$container_id" 2>&1 || true
+            docker rm -f "$container_id" >/dev/null 2>&1 || true
+          }
           trap cleanup EXIT
-          timeout 15 sh -c '
-            while :; do
-              state=$(docker inspect --format "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}" "$0" 2>/dev/null || true)
-              case "$state" in
-                "running healthy") exit 0 ;;
-                "running "|"running unhealthy"|"exited "*|"dead "*|"") exit 1 ;;
-              esac
-              sleep 1
-            done
-          ' "$container_id"
+
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8080/health >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$container_id" 2>/dev/null || echo false)" != "true" ]; then
+              echo "Container exited before becoming healthy."
+              break
+            fi
+            sleep 2
+          done
+
+          test "$ok" = "1"
+          echo "health endpoint OK"
 
       - name: Scan candidate image with Trivy
-        if: inputs.scan
+        if: always() && inputs.scan
         continue-on-error: ${{ !inputs.block_on_scan_failure }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
