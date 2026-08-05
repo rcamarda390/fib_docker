@@ -193,7 +193,7 @@ jobs:
         run: |
           set -euo pipefail
           IFS=',' read -r -a SMOKE_ARGS <<< "$SMOKE_COMMAND"
-          docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
+          timeout 15 docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Scan candidate image with Trivy
         if: inputs.scan
