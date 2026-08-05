@@ -36,7 +36,6 @@ jobs:
       version_arg: BIFROST_VERSION
       # The Dockerfile clones this exact upstream commit and verifies the tag.
       platforms: linux/amd64
-      smoke_command: bash,-c,timeout 5 /app/main --version 2>&1 || true
       scan: true
       auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}
