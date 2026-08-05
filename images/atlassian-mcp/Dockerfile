@@ -9,8 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN useradd --system --create-home --home-dir /home/atlassian --shell /usr/sbin/nologin atlassian \
+    && apt-get update \
+    && apt-get dist-upgrade --yes --no-install-recommends \
     && pip install --no-cache-dir "mcp-atlassian==${ATLASSIAN_VERSION}" \
-    && rm -rf /root/.cache
+    && rm -rf /root/.cache /var/lib/apt/lists/*
 
 USER atlassian
 WORKDIR /home/atlassian
