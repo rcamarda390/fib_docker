@@ -30,6 +30,10 @@ on:
         required: false
         default: ""
         type: string
+      run_smoke_test:
+        required: false
+        default: true
+        type: boolean
       publish:
         required: false
         default: true
@@ -187,7 +191,7 @@ jobs:
           tags: mcp-smoke:${{ github.run_id }}
 
       - name: Run smoke test
-        if: inputs.smoke_command != ''
+        if: inputs.run_smoke_test && inputs.smoke_command != ''
         env:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
