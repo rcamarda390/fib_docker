@@ -25,6 +25,7 @@ ARG SQZ_VERSION
 ARG SQZ_COMMIT
 WORKDIR /app
 COPY --from=builder /app/sqz-mcp /app/sqz-mcp
+COPY --from=source /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 LABEL org.opencontainers.image.title="sqz-mcp" \
       org.opencontainers.image.description="MCP server for sqz context compression, built from source" \
