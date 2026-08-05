@@ -207,13 +207,13 @@ jobs:
           timeout 15 docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Run health smoke test
-        if: inputs.run_smoke_test && inputs.smoke_healthcheck
+        if: inputs.smoke_healthcheck
         env:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
         run: |
           set -euo pipefail
-          container_id=$(docker run -d --rm $SMOKE_ENV "$IMAGE")
+          container_id=$(docker run -d $SMOKE_ENV "$IMAGE")
           cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           timeout 15 sh -c '
