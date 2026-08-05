@@ -15,6 +15,13 @@ FROM rust:1.85-alpine AS builder
 WORKDIR /build
 RUN apk add --no-cache musl-dev
 COPY --from=source /src/ .
+# Upstream's .cargo/config.toml is written for cross-compiling from a glibc host:
+# it forces `-C target-feature=+crt-static` and a `x86_64-linux-musl-gcc` linker.
+# On rust:*-alpine the host triple IS x86_64-unknown-linux-musl, so those settings
+# apply to host build units too — forced crt-static makes proc-macros (serde_derive)
+# impossible to build, and that linker does not exist in this image. Alpine's musl
+# target is statically linked by default, so dropping the file loses nothing.
+RUN rm -f .cargo/config.toml
 # Upstream gitignores its lockfile, so pin the dependency graph ourselves.
 # Regenerate with `cargo generate-lockfile` whenever SQZ_VERSION changes.
 COPY Cargo.lock ./Cargo.lock
