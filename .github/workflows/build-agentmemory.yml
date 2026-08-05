@@ -1,21 +1,6 @@
 name: Build and publish agentmemory MCP image
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - images/agentmemory/**
-      - images/agentmemory-mcp/**
-      - .github/workflows/build-agentmemory.yml
-      - .github/workflows/build-image.yml
-  pull_request:
-    paths:
-      - images/agentmemory/**
-      - images/agentmemory-mcp/**
-      - .github/workflows/build-agentmemory.yml
-      - .github/workflows/build-image.yml
-  schedule:
-    - cron: "9 5 * * 1"
   workflow_dispatch:
 
 permissions:
