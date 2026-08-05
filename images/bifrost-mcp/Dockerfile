@@ -51,7 +51,7 @@ RUN set -eux; \
     cd /build/transports; \
     go list -m -f '{{.Path}} {{.Version}}' all \
       | grep '^github.com/go-openapi/validate ' | tee /tmp/validate-version; \
-    grep -qE "^github.com/go-openapi/validate ${GO_OPENAPI_VALIDATE_VERSION#v}$" /tmp/validate-version
+    grep -qE "^github.com/go-openapi/validate ${GO_OPENAPI_VALIDATE_VERSION}$" /tmp/validate-version
 
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 
