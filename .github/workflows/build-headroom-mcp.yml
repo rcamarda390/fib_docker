@@ -1,0 +1,28 @@
+name: Build and publish Headroom MCP image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    name: Build and publish Headroom MCP image
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+    with:
+      image_name: headroom-mcp
+      context: ./images/headroom-mcp
+      dockerfile: ./images/headroom-mcp/Dockerfile
+      config: images/headroom-mcp/image.yaml
+      version_arg: HEADROOM_VERSION
+      platforms: linux/amd64
+      smoke_command: __smoke
+      scan: true
+      auto_increment_revision: true
+      publish: true
