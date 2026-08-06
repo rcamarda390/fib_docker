@@ -23,6 +23,7 @@ ARG RUSTUP_VERSION
 ENV CARGO_HOME=/usr/local/cargo \
     RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:${PATH} \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
@@ -56,10 +57,10 @@ COPY --from=source /src/crates/ crates/
 COPY --from=source /src/headroom/ headroom/
 
 RUN uv sync --locked --extra mcp --no-dev --no-editable
-RUN cd /tmp && PATH="/build/.venv/bin:${PATH}" python -c \
+RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
-RUN test "$(PATH="/build/.venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("headroom-ai"))')" = "$HEADROOM_VERSION"
+RUN test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("headroom-ai"))')" = "$HEADROOM_VERSION"
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 ARG HEADROOM_VERSION
@@ -79,7 +80,7 @@ RUN useradd --system --create-home --home-dir /home/headroom \
     && chown -R headroom:headroom /home/headroom \
     && python -m pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" \
     && rm -rf /root/.cache
-COPY --from=builder /build/.venv /opt/venv
+COPY --from=builder /opt/venv /opt/venv
 COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
 RUN chmod +x /usr/local/bin/headroom-entrypoint
