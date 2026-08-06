@@ -59,7 +59,7 @@ RUN uv sync --locked --extra mcp --no-dev --no-editable
 RUN cd /tmp && PATH="/build/.venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
-RUN test "$(python -c 'import importlib.metadata; print(importlib.metadata.version("headroom-ai"))')" = "$HEADROOM_VERSION"
+RUN test "$(PATH="/build/.venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("headroom-ai"))')" = "$HEADROOM_VERSION"
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 ARG HEADROOM_VERSION
