@@ -23,6 +23,7 @@ try:
     stdout, stderr = process.communicate(json.dumps(request) + "\n", timeout=10)
 except subprocess.TimeoutExpired:
     process.kill()
+    process.communicate()
     raise SystemExit("MCP initialize timed out")
 
 if process.returncode != 0:

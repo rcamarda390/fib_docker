@@ -47,6 +47,7 @@ RUN test "$(python -c 'import importlib.metadata; print(importlib.metadata.versi
 FROM python:${PYTHON_VERSION}-slim AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
+ARG PYTHON_VERSION
 
 ENV HEADROOM_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1 \
