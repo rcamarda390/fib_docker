@@ -288,6 +288,7 @@ jobs:
       - name: Summary
         env:
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          UPSTREAM_VERSION: ${{ steps.meta.outputs.upstream_version }}
           GHCR_IMAGE: ${{ steps.meta.outputs.ghcr_image }}
           DOCKERHUB_IMAGE: ${{ steps.meta.outputs.dockerhub_image }}
           PUBLISH: ${{ inputs.publish }}
@@ -308,12 +309,30 @@ jobs:
               echo "## MCP image candidate validated (not published)"
               echo "No registry push was performed."
             fi
+            echo "- Current upstream version: \`$UPSTREAM_VERSION\`"
             echo "- Versioned tag: \`$IMAGE_TAG\`"
+            if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_GHCR" = "true" ]; then
+              echo
+              echo "### Pull from GHCR"
+              echo '```sh'
+              echo "docker pull $GHCR_IMAGE"
+              echo '```'
+            fi
+            if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_DOCKERHUB" = "true" ]; then
+              echo
+              echo "### Pull from Docker Hub"
+              echo '```sh'
+              echo "docker pull $DOCKERHUB_IMAGE"
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "Current upstream version: $UPSTREAM_VERSION"
           echo "MCP image versioned tag: $IMAGE_TAG"
           if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_GHCR" = "true" ]; then
             echo "Pushed to GHCR: $GHCR_IMAGE"
+            echo "Pull from GHCR: docker pull $GHCR_IMAGE"
           fi
           if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_DOCKERHUB" = "true" ]; then
             echo "Pushed to Docker Hub: $DOCKERHUB_IMAGE"
+            echo "Pull from Docker Hub: docker pull $DOCKERHUB_IMAGE"
           fi
