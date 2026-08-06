@@ -35,6 +35,8 @@ RUN apt-get update \
 RUN python -m pip install --no-cache-dir \
       "pip==${PIP_VERSION}" \
       "uv==0.11.18"
+# Checksums come from the matching rustup-init.sha256 file in the Rust release
+# archive.
 RUN set -eux; \
     case "$(dpkg --print-architecture)" in \
       amd64) rust_arch=x86_64-unknown-linux-gnu; rust_sha=20a06e644b0d9bd2fbdbfd52d42540bdde820ea7df86e92e533c073da0cdd43c ;; \
@@ -77,8 +79,10 @@ ENV HEADROOM_HOST=0.0.0.0 \
 RUN useradd --system --create-home --home-dir /home/headroom \
       --shell /usr/sbin/nologin headroom \
     && mkdir -p /home/headroom/.headroom \
-    && chown -R headroom:headroom /home/headroom \
-    && python -m pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" \
+    && chown -R headroom:headroom /home/headroom
+# Keep the base interpreter's pip out of the scanner's vulnerable range even
+# though the application itself runs from the locked virtual environment.
+RUN python -m pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" \
     && rm -rf /root/.cache
 COPY --from=builder /opt/venv /opt/venv
 COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
