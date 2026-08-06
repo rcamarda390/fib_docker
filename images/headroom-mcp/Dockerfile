@@ -14,7 +14,6 @@ RUN apk add --no-cache ca-certificates git \
 
 FROM python:${PYTHON_VERSION}-slim AS builder
 ARG HEADROOM_VERSION
-ARG HEADROOM_COMMIT
 ARG PYTHON_VERSION
 
 ENV CARGO_HOME=/usr/local/cargo \
@@ -61,6 +60,9 @@ RUN useradd --system --create-home --home-dir /home/headroom \
 COPY --from=builder /usr/local/lib/python${PYTHON_VERSION}/site-packages \
     /usr/local/lib/python${PYTHON_VERSION}/site-packages
 COPY --from=builder /usr/local/bin/headroom /usr/local/bin/headroom
+COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
+COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
+RUN chmod +x /usr/local/bin/headroom-entrypoint
 
 USER headroom
 WORKDIR /home/headroom
@@ -73,4 +75,4 @@ LABEL org.opencontainers.image.title="headroom-mcp" \
       org.opencontainers.image.version="${HEADROOM_VERSION}" \
       org.opencontainers.image.revision="${HEADROOM_COMMIT}"
 
-ENTRYPOINT ["headroom", "mcp", "serve"]
+ENTRYPOINT ["headroom-entrypoint"]

@@ -2,6 +2,7 @@ name: Build and publish Headroom MCP image
 
 on:
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: write
@@ -22,7 +23,7 @@ jobs:
       config: images/headroom-mcp/image.yaml
       version_arg: HEADROOM_VERSION
       platforms: linux/amd64
-      smoke_command: mcp,serve,--help
+      smoke_command: __smoke
       scan: true
       auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}
