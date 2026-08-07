@@ -22,6 +22,8 @@ COPY --from=source /src/ui/ ./
 RUN npm run build-enterprise
 
 FROM golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc AS builder
+ARG GO_GIT_VERSION
+ARG GRPC_VERSION
 WORKDIR /build
 RUN apk add --no-cache gcc musl-dev sqlite-dev binutils binutils-gold
 ENV CGO_ENABLED=1 GOOS=linux
