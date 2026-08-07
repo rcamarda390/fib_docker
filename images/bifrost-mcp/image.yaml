@@ -1,8 +1,8 @@
 name: bifrost-mcp
-upstream_version: 2.0.0-prerelease2
+upstream_version: ent-v1.5.8-base
 revision: 12
 build_args:
-  BIFROST_COMMIT: 4a31f776fbe38c7177dea5034f639852d0c1342e
+  BIFROST_COMMIT: dcf245fdb22fe39f77c721be9b8c76ad2da32b9b
   GO_OPENAPI_VALIDATE_VERSION: v0.26.1
 publish:
   ghcr: true
