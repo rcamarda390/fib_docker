@@ -58,7 +58,10 @@ COPY --from=source /src/Cargo.toml /src/Cargo.lock /src/rust-toolchain.toml ./
 COPY --from=source /src/crates/ crates/
 COPY --from=source /src/headroom/ headroom/
 
-RUN uv sync --locked --extra mcp --no-dev --no-editable
+# The pinned upstream release can contain a lockfile that uv considers stale
+# when evaluated against the release metadata. Use the checked-in resolution
+# without attempting to rewrite it during the image build.
+RUN uv sync --frozen --extra mcp --no-dev --no-editable
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
