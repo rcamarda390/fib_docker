@@ -173,7 +173,9 @@ jobs:
           puts "dockerhub_image=docker.io/#{dockerhub}/#{name}:#{version}-v#{revision}"
           puts "upstream_version=#{version}"
           puts "revision=#{revision}"
-          puts "revision_build_arg=#{ENV.fetch("REVISION_ARG")}=v#{revision}" unless ENV.fetch("REVISION_ARG").empty?
+          revision_arg = ENV.fetch("REVISION_ARG")
+          revision_arg = "MCP_IMAGE_REVISION" if revision_arg.empty?
+          puts "revision_build_arg=#{revision_arg}=v#{revision}"
           puts "build_args<<BUILD_ARGS"
           (config["build_args"] || {}).each do |key, value|
             abort "build_args values must be strings" unless value.is_a?(String)
