@@ -17,6 +17,7 @@ FROM node:26-trixie-slim AS production
 ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v4
 LABEL org.opencontainers.image.title="agentmemory" \
+      org.opencontainers.image.version="${AGENTMEMORY_VERSION}-${AGENTMEMORY_IMAGE_VERSION}" \
       org.opencontainers.image.description="Pinned agentmemory ${AGENTMEMORY_VERSION} image for air-gapped deployments" \
       agentmemory.version="${AGENTMEMORY_VERSION}" \
       agentmemory.image-version="${AGENTMEMORY_IMAGE_VERSION}"

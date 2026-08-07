@@ -29,6 +29,7 @@ FROM gcr.io/distroless/base-debian12:nonroot
 ARG III_VERSION
 ARG III_IMAGE_VERSION
 LABEL org.opencontainers.image.title="iii-engine" \
+      org.opencontainers.image.version="${III_VERSION}-${III_IMAGE_VERSION}" \
       org.opencontainers.image.description="Pinned iii-engine ${III_VERSION} image for air-gapped agentmemory deployments" \
       iii.version="${III_VERSION}" \
       iii.image-version="${III_IMAGE_VERSION}"
