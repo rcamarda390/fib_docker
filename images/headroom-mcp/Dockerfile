@@ -6,7 +6,7 @@ ARG PYTHON_VERSION=3.13
 ARG PIP_VERSION=26.2.1
 ARG RUSTUP_VERSION=1.28.2
 
-FROM alpine:3.23.4 AS source
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
 RUN apk add --no-cache ca-certificates git \
@@ -28,6 +28,7 @@ ENV CARGO_HOME=/usr/local/cargo \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        build-essential g++ curl ca-certificates patchelf \
     && rm -rf /var/lib/apt/lists/*
@@ -79,7 +80,10 @@ ENV HEADROOM_HOST=0.0.0.0 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PATH=/opt/venv/bin:${PATH}
 
-RUN useradd --system --create-home --home-dir /home/headroom \
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --home-dir /home/headroom \
       --shell /usr/sbin/nologin headroom \
     && mkdir -p /home/headroom/.headroom \
     && chown -R headroom:headroom /home/headroom
