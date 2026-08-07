@@ -174,8 +174,12 @@ jobs:
           puts "upstream_version=#{version}"
           puts "revision=#{revision}"
           revision_arg = ENV.fetch("REVISION_ARG")
-          revision_arg = "MCP_IMAGE_REVISION" if revision_arg.empty?
-          puts "revision_build_arg=#{revision_arg}=v#{revision}"
+          revision_value = "v#{revision}"
+          if revision_arg.empty?
+            revision_arg = "BUILDKIT_INLINE_CACHE"
+            revision_value = "0"
+          end
+          puts "revision_build_arg=#{revision_arg}=#{revision_value}"
           puts "build_args<<BUILD_ARGS"
           (config["build_args"] || {}).each do |key, value|
             abort "build_args values must be strings" unless value.is_a?(String)
