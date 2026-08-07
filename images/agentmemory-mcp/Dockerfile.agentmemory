@@ -1,6 +1,5 @@
-# Trixie supplies fixed zlib and glibc packages for CVE-2023-45853,
-# CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928.
-FROM node:26-trixie-slim AS npm-install
+# Bookworm is the stable Debian base; apt upgrade applies current security fixes.
+FROM node:26-bookworm-slim AS npm-install
 ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v4
 WORKDIR /opt/agentmemory
@@ -13,7 +12,7 @@ ENV XENOVA_CACHE_DIR=/opt/agentmemory/model-cache
 COPY cache-models.js /opt/agentmemory/cache-models.js
 RUN node /opt/agentmemory/cache-models.js
 
-FROM node:26-trixie-slim AS production
+FROM node:26-bookworm-slim AS production
 ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v4
 LABEL org.opencontainers.image.title="agentmemory" \
