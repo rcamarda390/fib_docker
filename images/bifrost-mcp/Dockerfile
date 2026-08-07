@@ -3,6 +3,8 @@
 ARG BIFROST_VERSION=2.0.0-prerelease2
 ARG BIFROST_COMMIT=4a31f776fbe38c7177dea5034f639852d0c1342e
 ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
+ARG GO_GIT_VERSION=v5.19.2
+ARG GRPC_VERSION=v1.82.1
 
 FROM alpine:3.23.5@sha256:1beb0dc0a51de7ff38e3b5274078a2e0b81113ba5c7535e1a03d5913a5edbda3 AS source
 ARG BIFROST_VERSION
@@ -19,7 +21,7 @@ RUN npm ci
 COPY --from=source /src/ui/ ./
 RUN npm run build-enterprise
 
-FROM golang:1.26.4-alpine3.23@sha256:18b460dd17542c2ba43299a633cf6ebfc1115101509531471d7cfce1019af083 AS builder
+FROM golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc AS builder
 WORKDIR /build
 RUN apk add --no-cache gcc musl-dev sqlite-dev binutils binutils-gold
 ENV CGO_ENABLED=1 GOOS=linux
@@ -45,6 +47,9 @@ RUN set -eux; \
           go get "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}"); \
       fi; \
     done; \
+    (cd transports && GOWORK=off GOFLAGS=-mod=mod \
+      go get "github.com/go-git/go-git/v5@${GO_GIT_VERSION}" \
+        "google.golang.org/grpc@${GRPC_VERSION}"); \
     go work sync
 
 RUN set -eux; \
@@ -52,6 +57,14 @@ RUN set -eux; \
     go list -m -f '{{.Path}} {{.Version}}' all \
       | grep '^github.com/go-openapi/validate ' | tee /tmp/validate-version; \
     grep -Fxq "github.com/go-openapi/validate ${GO_OPENAPI_VALIDATE_VERSION}" /tmp/validate-version
+
+RUN set -eux; \
+    cd /build/transports; \
+    go list -m -f '{{.Path}} {{.Version}}' all \
+      | grep -E '^(github.com/go-git/go-git/v5|google.golang.org/grpc) ' \
+      | tee /tmp/bifrost-remediated-versions; \
+    grep -Fxq "github.com/go-git/go-git/v5 ${GO_GIT_VERSION}" /tmp/bifrost-remediated-versions; \
+    grep -Fxq "google.golang.org/grpc ${GRPC_VERSION}" /tmp/bifrost-remediated-versions
 
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 
