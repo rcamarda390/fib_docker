@@ -4,6 +4,8 @@ revision: 13
 build_args:
   BIFROST_COMMIT: 4a31f776fbe38c7177dea5034f639852d0c1342e
   GO_OPENAPI_VALIDATE_VERSION: v0.26.1
+  GO_GIT_VERSION: v5.19.2
+  GRPC_VERSION: v1.82.1
 publish:
   ghcr: true
   dockerhub: true
