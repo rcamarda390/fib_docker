@@ -21,6 +21,7 @@ jobs:
       dockerfile: ./images/agentmemory-mcp/Dockerfile.agentmemory
       config: images/agentmemory/image.yaml
       version_arg: AGENTMEMORY_VERSION
+      revision_arg: AGENTMEMORY_IMAGE_VERSION
       smoke_env: >-
         -e III_ENGINE_URL=ws://localhost:49134
         -e TRANSFORMERS_OFFLINE=1

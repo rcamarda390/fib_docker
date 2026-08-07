@@ -21,6 +21,7 @@ jobs:
       dockerfile: ./images/agentmemory-mcp/Dockerfile.iii-engine
       config: images/iii-engine/image.yaml
       version_arg: III_VERSION
+      revision_arg: III_IMAGE_VERSION
       smoke_command: --version
       auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}

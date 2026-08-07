@@ -18,6 +18,10 @@ on:
       version_arg:
         required: true
         type: string
+      revision_arg:
+        required: false
+        default: ""
+        type: string
       platforms:
         required: false
         default: linux/amd64,linux/arm64
@@ -138,6 +142,7 @@ jobs:
           CONFIG: ${{ inputs.config }}
           INPUT_IMAGE_NAME: ${{ inputs.image_name }}
           VERSION_ARG: ${{ inputs.version_arg }}
+          REVISION_ARG: ${{ inputs.revision_arg }}
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           PUBLISH: ${{ inputs.publish }}
           PUBLISH_GHCR: ${{ inputs.publish_ghcr }}
@@ -167,6 +172,8 @@ jobs:
           puts "ghcr_image=ghcr.io/#{ENV.fetch("GITHUB_REPOSITORY_OWNER").downcase}/#{name}:#{version}-v#{revision}"
           puts "dockerhub_image=docker.io/#{dockerhub}/#{name}:#{version}-v#{revision}"
           puts "upstream_version=#{version}"
+          puts "revision=#{revision}"
+          puts "revision_build_arg=#{ENV.fetch("REVISION_ARG")}=v#{revision}" unless ENV.fetch("REVISION_ARG").empty?
           puts "build_args<<BUILD_ARGS"
           (config["build_args"] || {}).each do |key, value|
             abort "build_args values must be strings" unless value.is_a?(String)
@@ -192,6 +199,7 @@ jobs:
           load: true
           build-args: |
             ${{ inputs.version_arg }}=${{ steps.meta.outputs.upstream_version }}
+            ${{ steps.meta.outputs.revision_build_arg }}
             ${{ steps.meta.outputs.build_args }}
           tags: mcp-smoke:${{ github.run_id }}
 
@@ -281,6 +289,7 @@ jobs:
           provenance: false
           build-args: |
             ${{ inputs.version_arg }}=${{ steps.meta.outputs.upstream_version }}
+            ${{ steps.meta.outputs.revision_build_arg }}
             ${{ steps.meta.outputs.build_args }}
           tags: |
             ${{ steps.meta.outputs.publish_tags }}
