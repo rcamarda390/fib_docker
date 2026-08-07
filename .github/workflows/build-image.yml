@@ -173,14 +173,9 @@ jobs:
           puts "dockerhub_image=docker.io/#{dockerhub}/#{name}:#{version}-v#{revision}"
           puts "upstream_version=#{version}"
           puts "revision=#{revision}"
-          revision_arg = ENV.fetch("REVISION_ARG")
-          revision_value = "v#{revision}"
-          if revision_arg.empty?
-            revision_arg = "_REVISION_UNUSED"
-            revision_value = "0"
-          end
-          puts "revision_build_arg=#{revision_arg}=#{revision_value}"
           puts "build_args<<BUILD_ARGS"
+          revision_arg = ENV.fetch("REVISION_ARG")
+          puts "#{revision_arg}=v#{revision}" unless revision_arg.empty?
           (config["build_args"] || {}).each do |key, value|
             abort "build_args values must be strings" unless value.is_a?(String)
             puts "#{key}=#{value}"
@@ -205,7 +200,6 @@ jobs:
           load: true
           build-args: |
             ${{ inputs.version_arg }}=${{ steps.meta.outputs.upstream_version }}
-            ${{ steps.meta.outputs.revision_build_arg }}
             ${{ steps.meta.outputs.build_args }}
           tags: mcp-smoke:${{ github.run_id }}
 
@@ -295,7 +289,6 @@ jobs:
           provenance: false
           build-args: |
             ${{ inputs.version_arg }}=${{ steps.meta.outputs.upstream_version }}
-            ${{ steps.meta.outputs.revision_build_arg }}
             ${{ steps.meta.outputs.build_args }}
           tags: |
             ${{ steps.meta.outputs.publish_tags }}
