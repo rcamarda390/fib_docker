@@ -4,7 +4,7 @@ ARG BIFROST_VERSION=2.0.0-prerelease2
 ARG BIFROST_COMMIT=4a31f776fbe38c7177dea5034f639852d0c1342e
 ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
 
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
+FROM alpine:3.23.5@sha256:1beb0dc0a51de7ff38e3b5274078a2e0b81113ba5c7535e1a03d5913a5edbda3 AS source
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 RUN apk add --no-cache ca-certificates git \
@@ -61,7 +61,7 @@ RUN cd /build/transports \
        -a -trimpath -tags sqlite_static -o /app/main ./bifrost-http \
     && test -f /app/main
 
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+FROM alpine:3.23.5@sha256:1beb0dc0a51de7ff38e3b5274078a2e0b81113ba5c7535e1a03d5913a5edbda3
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 WORKDIR /app
