@@ -176,7 +176,7 @@ jobs:
           revision_arg = ENV.fetch("REVISION_ARG")
           revision_value = "v#{revision}"
           if revision_arg.empty?
-            revision_arg = "BUILDKIT_INLINE_CACHE"
+            revision_arg = "_REVISION_UNUSED"
             revision_value = "0"
           end
           puts "revision_build_arg=#{revision_arg}=#{revision_value}"
