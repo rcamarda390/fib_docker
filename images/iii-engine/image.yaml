@@ -5,4 +5,4 @@ build_args: {}
 publish:
   ghcr: true
   dockerhub: true
-  latest: false
+  latest: true
