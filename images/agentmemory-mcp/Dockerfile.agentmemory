@@ -37,7 +37,6 @@ LABEL org.opencontainers.image.title="agentmemory" \
 RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends ca-certificates gosu openssl tini \
- && (apt-get purge -y --auto-remove --allow-remove-essential libpam-modules || echo "libpam-modules purge skipped: not removable in this base image") \
  && (apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 || echo "perl purge skipped: not removable in this base image") \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/agentmemory
@@ -86,24 +85,34 @@ ENV NODE_ENV=production \
 #   login                             Costs the image su/mount/logger, which it
 #   mount                             has no runtime use for.
 #   util-linux
+#   libpam-modules CVE-2025-8941  -- nothing here authenticates through PAM;
+#   libpam-runtime                    gosu drops privileges with plain
+#                                     setuid/setgid, and user lookup goes
+#                                     through glibc NSS, not PAM
 # dpkg is used rather than `apt-get purge --auto-remove` because gzip and
 # ncurses-bin are Essential and apt would cascade. No apt operations run after
 # this layer, so the unsatisfied dependencies are inert.
 #
-# libpam-modules (CVE-2025-8941) is handled in the apt layer above rather than
-# here. Nothing in this image authenticates through PAM -- gosu drops
-# privileges with plain setuid/setgid -- but its postrm execs
-# /usr/share/debconf/frontend, so purging it from this layer failed with exit
-# 127 (run 31384616028): the perl-base purge cascades into debconf, which is a
-# Perl program, and by this point both are gone. Purging it with apt, before
-# the perl purge, fixes the ordering: libpam-modules Depends on debconf, so apt
-# removes it while debconf is still configured, and apt resolves its reverse
-# dependencies properly instead of leaving the force-removed breakage that made
-# a dpkg purge here unworkable.
-RUN dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+# libpam-modules took three attempts and needs both halves of that sentence.
+# apt cannot do it: util-linux PreDepends on libpam-modules, and apt will not
+# break a PreDepends, so it re-selects the package for install and declines
+# (run 31389606735). dpkg can force past that -- util-linux and login are on
+# this very line -- but its postrm execs /usr/share/debconf/frontend, and the
+# perl-base purge above cascades into debconf, so the script exits 127 and
+# fails the build (run 31384616028). The stub below satisfies the exec so the
+# purge completes and dpkg records it as such. Skipping that cleanup is
+# harmless: it exists to drop the package's entries from the debconf database,
+# which was itself deleted a layer ago. dpkg removes the package's files
+# either way -- the maintainer script only tidies external state.
+RUN mkdir -p /usr/share/debconf \
+ && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
+ && chmod 0755 /usr/share/debconf/frontend \
+ && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
       gzip ncurses-bin ncurses-base libtinfo6 libacl1 libattr1 libsqlite3-0 \
       bsdutils libblkid1 liblastlog2-2 libmount1 libsmartcols1 libuuid1 \
-      login mount util-linux
+      login mount util-linux libpam-runtime libpam-modules \
+ && rm -rf /usr/share/debconf \
+ && ! dpkg-query -W -f='${Status}' libpam-modules 2>/dev/null | grep -q 'install ok installed'
 # brace-expansion 5.0.7 (CVE-2026-14257, CVE-2026-69152) and ip-address 10.2.0
 # (CVE-2026-69192) enter the image only through the npm that ships inside the
 # node base image -- this project's own lockfile pins neither, and resolves
