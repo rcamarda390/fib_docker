@@ -3,8 +3,9 @@
 ## Repository purpose
 
 This repository builds and publishes versioned Docker images for MCP services:
-`agentmemory`, `iii-engine`, and the air-gapped `gnosis-mcp` image. The root
-`Dockerfile` is a separate Docker Hub development image and is not an MCP image.
+`agentmemory` (agentmemory bundled with its compatible `iii` engine in one
+image, built from `images/agentmemory-server/`) and the air-gapped
+`gnosis-mcp` image, among others under `images/`.
 
 ## Required workflow
 
@@ -26,8 +27,8 @@ This repository builds and publishes versioned Docker images for MCP services:
 
 - `images/*/image.yaml` is the source of truth for the image name, upstream version,
   revision, build arguments, and registry publication flags.
-- Published `agentmemory` and `iii-engine` builds automatically increment and
-  commit `revision`; pull request validation builds do not consume revisions.
+- Published MCP image builds automatically increment and commit `revision`;
+  pull request validation builds do not consume revisions.
 - MCP tags use `<upstream_version>-v<revision>` and publish to both GHCR and Docker
   Hub. MCP images do not publish `latest`.
 - The reusable `.github/workflows/build-image.yml` workflow must keep registry
@@ -63,4 +64,4 @@ timeouts and resource limits. A health endpoint alone is not sufficient evidence
 that MCP initialization or dependent-service connectivity works.
 
 See `docs/MCP_BUILD_METHODOLOGY.md` and
-`images/agentmemory-mcp/CUSTOMIZATION.md` for the current release procedures.
+`images/agentmemory-server/README.md` for the current release procedures.

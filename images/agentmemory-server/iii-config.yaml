@@ -42,7 +42,7 @@ workers:
   - name: iii-observability
     config:
       enabled: true
-      service_name: iii-engine
+      service_name: agentmemory
       exporter: memory
       sampling_ratio: 0.1
       metrics_enabled: true

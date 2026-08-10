@@ -42,6 +42,14 @@ on:
         required: false
         default: false
         type: boolean
+      smoke_healthcheck_port:
+        required: false
+        default: 8080
+        type: number
+      smoke_healthcheck_path:
+        required: false
+        default: /health
+        type: string
       publish:
         required: false
         default: true
@@ -220,9 +228,11 @@ jobs:
         env:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
+          PORT: ${{ inputs.smoke_healthcheck_port }}
+          HEALTH_PATH: ${{ inputs.smoke_healthcheck_path }}
         run: |
           set -euo pipefail
-          container_id=$(docker run -d $SMOKE_ENV -p 127.0.0.1:8080:8080 "$IMAGE")
+          container_id=$(docker run -d $SMOKE_ENV -p "127.0.0.1:${PORT}:${PORT}" "$IMAGE")
           cleanup() {
             echo "----- container logs -----"
             docker logs "$container_id" 2>&1 | tail -100 || true
@@ -234,7 +244,7 @@ jobs:
 
           ok=0
           for _ in $(seq 1 30); do
-            if curl -fsS --max-time 3 http://127.0.0.1:8080/health >/dev/null 2>&1; then
+            if curl -fsS --max-time 3 "http://127.0.0.1:${PORT}${HEALTH_PATH}" >/dev/null 2>&1; then
               ok=1
               break
             fi
