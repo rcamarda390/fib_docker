@@ -1,0 +1,31 @@
+name: Build and publish agentmemory-server image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-agentmemory-server-image:
+    name: Build and publish agentmemory-server image
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+    with:
+      image_name: agentmemory
+      context: ./images/agentmemory-server
+      dockerfile: ./images/agentmemory-server/Dockerfile
+      config: images/agentmemory-server/image.yaml
+      version_arg: AGENTMEMORY_VERSION
+      revision_arg: AGENTMEMORY_IMAGE_VERSION
+      run_smoke_test: false
+      smoke_healthcheck: true
+      smoke_healthcheck_port: 3111
+      smoke_healthcheck_path: /agentmemory/livez
+      scan: true
+      auto_increment_revision: true
+      publish: ${{ github.event_name != 'pull_request' }}

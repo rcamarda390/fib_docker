@@ -1,8 +1,0 @@
-name: iii-engine
-upstream_version: 0.22.0
-revision: 20
-build_args: {}
-publish:
-  ghcr: true
-  dockerhub: true
-  latest: true

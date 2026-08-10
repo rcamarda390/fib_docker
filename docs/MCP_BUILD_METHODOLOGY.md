@@ -6,13 +6,21 @@ tag in both registries:
 - `ghcr.io/rcamarda390/<image>:<upstream-version>-v<revision>`
 - `docker.io/rcamarda390/<image>:<upstream-version>-v<revision>`
 
-The current images are `agentmemory`, `iii-engine`, `gnosis-mcp`,
-`atlassian-mcp`, `bifrost-mcp`, and `sqz-mcp`. Their
-metadata is human-edited in `images/<image>/image.yaml`. Published MCP builds
-automatically increment and commit the image revision. When `upstream_version`
-changes, the revision resets to `1`; pull request validation builds do not
-consume revisions.
-Image-specific Docker build arguments are also defined there.
+The current images are `agentmemory`, `gnosis-mcp`, `atlassian-mcp`,
+`bifrost-mcp`, `headroom-mcp`, and `sqz-mcp`. Their metadata is human-edited
+in `images/<image-dir>/image.yaml`. Published MCP builds automatically
+increment and commit the image revision. When `upstream_version` changes, the
+revision resets to `1`; pull request validation builds do not consume
+revisions. Image-specific Docker build arguments are also defined there.
+
+`agentmemory` is built from `images/agentmemory-server/`: agentmemory and its
+compatible `iii` engine binary are bundled into one image, there is no
+separate `iii-engine` image or workflow. `images/agentmemory-server/image.yaml`'s
+`build_args.III_VERSION` tracks the exact iii version agentmemory's own
+`iii-sdk` dependency pins — it is not bumped independently just because a
+newer `iii-hq/iii` release exists. See
+[`images/agentmemory-server/README.md`](../images/agentmemory-server/README.md)
+for the full architecture and update procedure.
 
 The `sqz-mcp` build vendors `images/sqz-mcp/Cargo.lock` because its upstream
 repository does not commit a lockfile. Regenerate that lockfile with

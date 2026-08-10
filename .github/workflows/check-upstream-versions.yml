@@ -39,8 +39,15 @@ jobs:
           #
           # Skipped images and reasons:
           #   gnosis-mcp  — version bump requires regenerating requirements.lock
-          #   iii-engine  — non-standard asset layout (iii/v<ver>/ path prefix)
-          #   agentmemory-mcp — no image.yaml; managed separately
+          #   agentmemory — version bump requires regenerating package-lock.json
+          #                 (npm ci pins the exact @agentmemory/agentmemory tree)
+          #                 and re-checking the iii-sdk pin agentmemory declares,
+          #                 not just editing upstream_version. The compatible iii
+          #                 engine (build_args.III_VERSION in
+          #                 images/agentmemory-server/image.yaml) is a dependency
+          #                 of agentmemory's iii-sdk pin, not an independent
+          #                 release to chase — do not bump it just because a
+          #                 newer iii-hq/iii tag exists.
           IMAGES=(
             "bifrost-mcp|maximhq/bifrost|transports/v|BIFROST_COMMIT"
             "headroom-mcp|headroomlabs-ai/headroom|v|HEADROOM_COMMIT"
