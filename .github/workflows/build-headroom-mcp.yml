@@ -2,6 +2,10 @@ name: Build and publish Headroom MCP image
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['images/headroom-mcp/**']
+  
 
 permissions:
   contents: write
