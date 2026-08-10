@@ -2,8 +2,9 @@
 # CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928 are still open against
 # debian:trixie libc6/libc-bin with no fixed version published, so `apt-get
 # upgrade` below cannot clear them and glibc cannot be removed from a
-# dynamically linked Node runtime. They are the only scan findings this image
-# carries that have no remediation available upstream.
+# dynamically linked Node runtime. Together with libpam-modules (CVE-2025-8941,
+# see the purge block further down) they are the scan findings this image
+# knowingly still carries; everything else is fixed or removed below.
 FROM node:26-trixie-slim AS npm-install
 ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v4
@@ -62,13 +63,22 @@ ENV NODE_ENV=production \
 #                                    link neither
 #   libsqlite3-0   CVE-2026-11822 -- the node binary bundles SQLite; its NEEDED
 #                  CVE-2026-11824    list is libatomic/libstdc++/libgcc_s/libc
-#   libpam-modules CVE-2025-8941  -- nothing here authenticates through PAM;
-#                                    gosu drops privileges via setuid/setgid
 # dpkg is used rather than `apt-get purge --auto-remove` because gzip and
 # ncurses-bin are Essential and apt would cascade. No apt operations run after
 # this layer, so the unsatisfied dependencies are inert.
+#
+# libpam-modules (CVE-2025-8941) is deliberately NOT in that list even though
+# nothing here authenticates through PAM -- gosu drops privileges with plain
+# setuid/setgid. Its postrm execs /usr/share/debconf/frontend, and debconf is
+# already gone by this point because the perl-base purge above cascades into
+# it, so the purge aborts with exit 127 and fails the build. The orderings that
+# would satisfy it are both worse: running it before the perl purge leaves apt
+# facing broken dependencies, which makes it decline the perl removal and hand
+# back the ~18 perl-base findings that purge exists to clear, and stubbing out
+# the debconf frontend to coax the maintainer script through leaves dpkg
+# half-configured. One unreachable PAM finding is the cheaper trade.
 RUN dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-      gzip ncurses-bin libacl1 libattr1 libsqlite3-0 libpam-modules
+      gzip ncurses-bin libacl1 libattr1 libsqlite3-0
 # brace-expansion 5.0.7 (CVE-2026-14257, CVE-2026-69152) and ip-address 10.2.0
 # (CVE-2026-69192) enter the image only through the npm that ships inside the
 # node base image -- this project's own lockfile pins neither, and resolves
