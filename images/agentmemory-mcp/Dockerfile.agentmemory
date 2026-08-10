@@ -2,9 +2,17 @@
 # CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928 are still open against
 # debian:trixie libc6/libc-bin with no fixed version published, so `apt-get
 # upgrade` below cannot clear them and glibc cannot be removed from a
-# dynamically linked Node runtime. Together with libpam-modules (CVE-2025-8941,
-# see the purge block further down) they are the scan findings this image
-# knowingly still carries; everything else is fixed or removed below.
+# dynamically linked Node runtime.
+#
+# The other finding this image knowingly carries is CVE-2026-54285 against
+# @opentelemetry/core 1.30.1. iii-sdk pins @opentelemetry/sdk-trace-node
+# ^1.30.0, and 1.30.1 ends that line, so the fix only exists in core 2.x. Both
+# ways of forcing it break the product: overriding core alone kills
+# sdk-trace-base 1.30.1 at import, because core 2.x dropped TracesSamplerValues,
+# and lifting the whole stable SDK to 2.x leaves the experimental 0.57.2
+# packages reading record.instrumentationLibrary, renamed instrumentationScope
+# in 2.x, so OTLP export throws. Clearing it needs iii-sdk on OTel 2.x
+# upstream, not an override here.
 FROM node:26-trixie-slim AS npm-install
 ARG AGENTMEMORY_VERSION=0.9.28
 ARG AGENTMEMORY_IMAGE_VERSION=v4
@@ -29,6 +37,7 @@ LABEL org.opencontainers.image.title="agentmemory" \
 RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends ca-certificates gosu openssl tini \
+ && (apt-get purge -y --auto-remove --allow-remove-essential libpam-modules || echo "libpam-modules purge skipped: not removable in this base image") \
  && (apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 || echo "perl purge skipped: not removable in this base image") \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/agentmemory
@@ -81,16 +90,16 @@ ENV NODE_ENV=production \
 # ncurses-bin are Essential and apt would cascade. No apt operations run after
 # this layer, so the unsatisfied dependencies are inert.
 #
-# libpam-modules (CVE-2025-8941) is deliberately NOT in that list even though
-# nothing here authenticates through PAM -- gosu drops privileges with plain
-# setuid/setgid. Its postrm execs /usr/share/debconf/frontend, and debconf is
-# already gone by this point because the perl-base purge above cascades into
-# it, so the purge aborts with exit 127 and fails the build. The orderings that
-# would satisfy it are both worse: running it before the perl purge leaves apt
-# facing broken dependencies, which makes it decline the perl removal and hand
-# back the ~18 perl-base findings that purge exists to clear, and stubbing out
-# the debconf frontend to coax the maintainer script through leaves dpkg
-# half-configured. One unreachable PAM finding is the cheaper trade.
+# libpam-modules (CVE-2025-8941) is handled in the apt layer above rather than
+# here. Nothing in this image authenticates through PAM -- gosu drops
+# privileges with plain setuid/setgid -- but its postrm execs
+# /usr/share/debconf/frontend, so purging it from this layer failed with exit
+# 127 (run 31384616028): the perl-base purge cascades into debconf, which is a
+# Perl program, and by this point both are gone. Purging it with apt, before
+# the perl purge, fixes the ordering: libpam-modules Depends on debconf, so apt
+# removes it while debconf is still configured, and apt resolves its reverse
+# dependencies properly instead of leaving the force-removed breakage that made
+# a dpkg purge here unworkable.
 RUN dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
       gzip ncurses-bin ncurses-base libtinfo6 libacl1 libattr1 libsqlite3-0 \
       bsdutils libblkid1 liblastlog2-2 libmount1 libsmartcols1 libuuid1 \
@@ -111,10 +120,19 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
 # mkdir/chown/cat from coreutils, openssl for the HMAC secret, tini as PID 1,
 # and gosu dropping to node:node before exec'ing the runtime -- then loads the
 # two native addons, since sharp pulls in libvips and onnxruntime-node pulls in
-# libonnxruntime, and those are what a careless purge would break first. The
-# second half fails the build if a purge ever silently degrades into a no-op and
-# quietly reintroduces the findings. perl is deliberately absent from that list:
-# the purge above tolerates a base image where it is not removable.
+# libonnxruntime, and those are what a careless purge would break first.
+#
+# It then imports iii-sdk and the MCP SDK's streamableHttp entry. Those two drag
+# in the whole OpenTelemetry graph and hono respectively, which is where a
+# dependency override does its damage: bumping @opentelemetry/core to 2.x
+# resolves and installs cleanly, then dies on `TracesSamplerValues` the moment
+# sdk-trace-base 1.30.1 is imported. The workflow smoke test is `node -e
+# console.log`, which never touches the application's module graph, so nothing
+# else in this pipeline would notice before runtime.
+#
+# The last block fails the build if a purge ever silently degrades into a no-op
+# and quietly reintroduces the findings. perl is deliberately absent from that
+# list: the purge above tolerates a base image where it is not removable.
 RUN set -eu \
  && verify_dir=/tmp/agentmemory-verify \
  && mkdir -p "$verify_dir" \
@@ -123,9 +141,12 @@ RUN set -eu \
  && test -n "$(cat "$verify_dir/secret")" \
  && test -x /usr/bin/tini \
  && gosu node:node node -e "console.log('agentmemory runtime path OK')" \
- && gosu node:node node -e "require('/opt/agentmemory/node_modules/@opentelemetry/propagator-b3')" \
- && gosu node:node node -e "require('/opt/agentmemory/node_modules/sharp')" \
- && gosu node:node node -e "require('/opt/agentmemory/node_modules/onnxruntime-node')" \
+ && cd /opt/agentmemory \
+ && gosu node:node node -e "require('@opentelemetry/propagator-b3')" \
+ && gosu node:node node -e "require('sharp')" \
+ && gosu node:node node -e "require('onnxruntime-node')" \
+ && gosu node:node node -e "require('iii-sdk')" \
+ && gosu node:node node -e "require('@modelcontextprotocol/sdk/server/streamableHttp.js')" \
  && rm -rf "$verify_dir" \
  && for removed in npm npx corepack gzip tput su mount; do \
       if command -v "$removed" >/dev/null 2>&1; then \
