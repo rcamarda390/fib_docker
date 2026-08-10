@@ -6,11 +6,19 @@ FROM debian:bookworm-slim AS downloader
 ARG III_VERSION
 ARG TARGETARCH
 ARG CURL_INSECURE
-# Upgrade all packages to pull in any available security patches before building
 RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends ca-certificates curl tar busybox-static \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /usr/share/debconf \
+ && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
+ && chmod 0755 /usr/share/debconf/frontend \
+ && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+      bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
+      libuuid1 ncurses-base util-linux libacl1 liblastlog2-2 ncurses-bin libmount1 login mount \
+ && rm -rf /usr/share/debconf \
+ && ! dpkg-query -W -f='${Status}' libpam-modules 2>/dev/null | grep -q 'install ok installed'
 WORKDIR /tmp
 RUN case "$TARGETARCH" in \
       amd64) III_ARCH='x86_64-unknown-linux-gnu'; III_SHA256='3479968f31ff6376aa4b7b21b0fb0815ddd5873ed521e3c14e60972cd9941766'; LIB_DIR='/lib/x86_64-linux-gnu' ;; \
