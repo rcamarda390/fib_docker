@@ -68,29 +68,23 @@ RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
 RUN test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("headroom-ai"))')" = "$HEADROOM_VERSION"
 
-FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
 ARG PYTHON_VERSION
-ARG PIP_VERSION
 
 ENV HEADROOM_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PATH=/opt/venv/bin:${PATH}
 
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --create-home --home-dir /home/headroom \
-      --shell /usr/sbin/nologin headroom \
+RUN apk add --no-cache \
+    python${PYTHON_VERSION} \
+    ca-certificates \
+    && adduser -D -s /sbin/nologin -h /home/headroom headroom \
     && mkdir -p /home/headroom/.headroom \
     && chown -R headroom:headroom /home/headroom
-# Keep the base interpreter's pip out of the scanner's vulnerable range even
-# though the application itself runs from the locked virtual environment.
-RUN python -m pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" \
-    && rm -rf /root/.cache
+
 COPY --from=builder /opt/venv /opt/venv
 COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
