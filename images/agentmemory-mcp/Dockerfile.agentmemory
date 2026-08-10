@@ -56,13 +56,27 @@ ENV NODE_ENV=production \
 # reachable from the runtime path, so they are dropped outright:
 #   gzip           CVE-2026-41992 -- node links zlib statically; nothing shells
 #                                    out to gzip and nothing untars at runtime
-#   ncurses-bin    CVE-2025-69720 -- tput/clear/reset only; bash needs
-#                                    libtinfo6, which is a different package
+#   ncurses-bin    CVE-2025-69720 -- one CVE in the ncurses source package, so
+#   ncurses-base                      all three binary packages carry it and
+#   libtinfo6                         purging only ncurses-bin leaves it behind
+#                                     (run 31384857331 proved that). bash is the
+#                                     only thing linking libtinfo.so.6 and this
+#                                     image never runs bash -- the entrypoint is
+#                                     dash and CMD is node -- so all three go
 #   libacl1        CVE-2026-54369 -- only cp/mv/install/tar link libacl.so.1;
 #   libattr1       CVE-2026-54371    the entrypoint uses mkdir/chown/cat, which
 #                                    link neither
 #   libsqlite3-0   CVE-2026-11822 -- the node binary bundles SQLite; its NEEDED
 #                  CVE-2026-11824    list is libatomic/libstdc++/libgcc_s/libc
+#   bsdutils       CVE-2026-53615 -- the util-linux family, an integer overflow
+#   libblkid1                         in libblkid partition parsing. Nothing
+#   liblastlog2-2                     here mounts filesystems, reads partition
+#   libmount1                         tables or logs in; gosu needs none of it,
+#   libsmartcols1                     and neither libvips (sharp) nor
+#   libuuid1                          onnxruntime name any of these in NEEDED.
+#   login                             Costs the image su/mount/logger, which it
+#   mount                             has no runtime use for.
+#   util-linux
 # dpkg is used rather than `apt-get purge --auto-remove` because gzip and
 # ncurses-bin are Essential and apt would cascade. No apt operations run after
 # this layer, so the unsatisfied dependencies are inert.
@@ -78,7 +92,9 @@ ENV NODE_ENV=production \
 # the debconf frontend to coax the maintainer script through leaves dpkg
 # half-configured. One unreachable PAM finding is the cheaper trade.
 RUN dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-      gzip ncurses-bin libacl1 libattr1 libsqlite3-0
+      gzip ncurses-bin ncurses-base libtinfo6 libacl1 libattr1 libsqlite3-0 \
+      bsdutils libblkid1 liblastlog2-2 libmount1 libsmartcols1 libuuid1 \
+      login mount util-linux
 # brace-expansion 5.0.7 (CVE-2026-14257, CVE-2026-69152) and ip-address 10.2.0
 # (CVE-2026-69192) enter the image only through the npm that ships inside the
 # node base image -- this project's own lockfile pins neither, and resolves
@@ -93,10 +109,12 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
 # Prove the package removals above did not cut into anything this image needs.
 # The first half walks the exact syscall path docker-entrypoint.sh takes --
 # mkdir/chown/cat from coreutils, openssl for the HMAC secret, tini as PID 1,
-# and gosu dropping to node:node before exec'ing the runtime. The second half
-# fails the build if a purge ever silently degrades into a no-op and quietly
-# reintroduces the findings. perl is deliberately absent from that list: the
-# purge above tolerates a base image where it is not removable.
+# and gosu dropping to node:node before exec'ing the runtime -- then loads the
+# two native addons, since sharp pulls in libvips and onnxruntime-node pulls in
+# libonnxruntime, and those are what a careless purge would break first. The
+# second half fails the build if a purge ever silently degrades into a no-op and
+# quietly reintroduces the findings. perl is deliberately absent from that list:
+# the purge above tolerates a base image where it is not removable.
 RUN set -eu \
  && verify_dir=/tmp/agentmemory-verify \
  && mkdir -p "$verify_dir" \
@@ -106,8 +124,10 @@ RUN set -eu \
  && test -x /usr/bin/tini \
  && gosu node:node node -e "console.log('agentmemory runtime path OK')" \
  && gosu node:node node -e "require('/opt/agentmemory/node_modules/@opentelemetry/propagator-b3')" \
+ && gosu node:node node -e "require('/opt/agentmemory/node_modules/sharp')" \
+ && gosu node:node node -e "require('/opt/agentmemory/node_modules/onnxruntime-node')" \
  && rm -rf "$verify_dir" \
- && for removed in npm npx corepack gzip tput; do \
+ && for removed in npm npx corepack gzip tput su mount; do \
       if command -v "$removed" >/dev/null 2>&1; then \
         echo "ERROR: $removed survived removal; scan findings would regress" >&2; \
         exit 1; \
