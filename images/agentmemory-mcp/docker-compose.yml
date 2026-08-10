@@ -8,7 +8,7 @@ services:
     restart: "no"
 
   iii-engine:
-    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/iii-engine:0.22.0-v9
+    image: ${ARTIFACTORY_REGISTRY:-docker.io/rcamarda390}/iii-engine:latest
     depends_on:
       iii-data-init:
         condition: service_completed_successfully

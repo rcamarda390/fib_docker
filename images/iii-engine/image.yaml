@@ -1,8 +1,8 @@
 name: iii-engine
 upstream_version: 0.22.0
-revision: 18
+revision: 19
 build_args: {}
 publish:
   ghcr: true
   dockerhub: true
-  latest: false
+  latest: true
