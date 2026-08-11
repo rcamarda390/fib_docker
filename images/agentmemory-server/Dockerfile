@@ -56,9 +56,12 @@ LABEL org.opencontainers.image.title="agentmemory-server" \
       agentmemory.image-version="${AGENTMEMORY_IMAGE_VERSION}"
 # Trixie supplies a fixed zlib package for CVE-2023-45853. The glibc findings
 # CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928 are still open against
-# debian:trixie libc6/libc-bin with no fixed version published, so `apt-get
-# upgrade` below cannot clear them and glibc cannot be removed from a
-# dynamically linked Node runtime.
+# debian:trixie libc6/libc-bin -- Debian's security tracker carries all three
+# as <no-dsa> "Minor issue" for trixie (no point release planned).
+# CVE-2026-5450 and CVE-2026-5928 are fixed upstream starting in glibc 2.42
+# (forky/sid); CVE-2026-5435 has no upstream fix at all yet. Either way
+# `apt-get upgrade` below cannot clear them and glibc cannot be removed from
+# a dynamically linked Node runtime.
 RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends ca-certificates gosu openssl tini \
@@ -114,10 +117,19 @@ ENV NODE_ENV=production \
 #   login                             Costs the image su/mount/logger, which it
 #   mount                             has no runtime use for.
 #   util-linux
-#   libpam-modules CVE-2025-8941  -- nothing here authenticates through PAM;
-#   libpam-runtime                    gosu drops privileges with plain
-#                                     setuid/setgid, and user lookup goes
-#                                     through glibc NSS, not PAM
+#   libpam0g       CVE-2025-8941  -- one CVE tracked against the pam source
+#   libpam-modules                    package (same pattern as ncurses
+#   libpam-runtime                    above), so all three binary packages
+#                                     carry it even though the vulnerable
+#                                     code (pam_namespace) ships only in
+#                                     libpam-modules. Nothing here
+#                                     authenticates through PAM; gosu drops
+#                                     privileges with plain setuid/setgid,
+#                                     and user lookup goes through glibc
+#                                     NSS, not PAM. libpam0g's own Depends
+#                                     are debconf, libaudit1 and libc6 --
+#                                     nothing in this image links
+#                                     libpam.so.0.
 # dpkg is used rather than `apt-get purge --auto-remove` because gzip and
 # ncurses-bin are Essential and apt would cascade. No apt operations run after
 # this layer, so the unsatisfied dependencies are inert.
@@ -139,9 +151,10 @@ RUN mkdir -p /usr/share/debconf \
  && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
       gzip ncurses-bin ncurses-base libtinfo6 libacl1 libattr1 libsqlite3-0 \
       bsdutils libblkid1 liblastlog2-2 libmount1 libsmartcols1 libuuid1 \
-      login mount util-linux libpam-runtime libpam-modules \
+      login mount util-linux libpam-runtime libpam-modules libpam0g \
  && rm -rf /usr/share/debconf \
- && ! dpkg-query -W -f='${Status}' libpam-modules 2>/dev/null | grep -q 'install ok installed'
+ && ! dpkg-query -W -f='${Status}' libpam-modules 2>/dev/null | grep -q 'install ok installed' \
+ && ! dpkg-query -W -f='${Status}' libpam0g 2>/dev/null | grep -q 'install ok installed'
 # brace-expansion 5.0.7 (CVE-2026-14257, CVE-2026-69152) and ip-address 10.2.0
 # (CVE-2026-69192) enter the image only through the npm that ships inside the
 # node base image -- this project's own lockfile pins neither, and resolves
