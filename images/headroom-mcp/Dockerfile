@@ -122,8 +122,8 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 #   libtinfo6                         payload, so none of it is used
 #   libacl1        CVE-2026-54369 -- only cp/mv/install/tar link libacl.so.1;
 #   libattr1       CVE-2026-54371    headroom uses mkdir/chown/cat only
-#   libsqlite3-0   CVE-2026-11822 -- Python bundles sqlite3 statically; the
-#                  CVE-2026-11824    NEEDED list is libatomic/libstdc++/libgcc_s/libc
+#   libsqlite3-0   KEPT -- Python 3.13's sqlite3 module dynamically links to
+#                        libsqlite3.so.0, so this library cannot be removed
 #   libpam0g       CVE-2025-8941  -- headroom doesn't authenticate through PAM;
 #   libpam-modules                    gosu uses plain setuid/setgid, user lookup
 #   libpam-runtime                    via glibc NSS, not PAM
@@ -151,7 +151,7 @@ RUN mkdir -p /usr/share/debconf \
  && chmod 0755 /usr/share/debconf/frontend \
  && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
       gzip ncurses-bin ncurses-base libtinfo6 \
-      libacl1 libattr1 libsqlite3-0 \
+      libacl1 libattr1 \
       libpam-runtime libpam-modules libpam0g libtasn1-6 \
  && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
