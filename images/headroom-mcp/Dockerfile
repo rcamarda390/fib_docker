@@ -63,13 +63,16 @@ COPY --from=source /src/headroom/ headroom/
 # when evaluated against the release metadata. Use the checked-in resolution
 # without attempting to rewrite it during the image build.
 RUN uv sync --frozen --extra mcp --no-dev --no-editable
-# Close CVE-2026-23949 (high), CVE-2025-47273 (medium, CWE-1395) by upgrading
-# setuptools from 70.3.0 to 80.10.0 (CWE-22 path traversal fix). Close
-# CVE-2026-57585 (7.5, CWE-416 use-after-free) by upgrading msgpack from
-# 1.1.2 to 1.2.1. These are transitive dependencies of headroom and cannot be
-# upgraded via the frozen uv.lock; pip upgrades them in the built virtual
-# environment without disturbing locked top-level dependencies.
-RUN /opt/venv/bin/python -m pip install --no-cache-dir --upgrade "setuptools>=80.10.0" "msgpack>=1.2.1"
+# There is deliberately no pip step here. `uv sync` builds /opt/venv without
+# seeding pip or setuptools, so any `pip`, `/opt/venv/bin/pip`, or
+# `python -m pip` invocation against this venv fails with "No module named
+# pip" -- use `uv pip install --python /opt/venv/bin/python` if a package ever
+# genuinely needs adding. The setuptools/msgpack upgrades that used to live
+# here targeted packages that headroom 0.35.0 does not install: uv resolves 69
+# packages into this venv and neither is among them, so the upgrade would have
+# added CVE surface rather than removing it. Trivy scans the built image and
+# will report either package if it reappears with a known advisory (reported
+# only, not blocking: this image leaves block_on_scan_failure at its default).
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"

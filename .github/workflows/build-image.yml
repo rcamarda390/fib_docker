@@ -199,6 +199,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build smoke-test image
+        id: smoke_build
         if: inputs.run_smoke_test || inputs.scan
         uses: docker/build-push-action@v7
         with:
@@ -261,11 +262,15 @@ jobs:
           fi
           echo "health endpoint OK"
 
+      # Gated on the image actually existing: with `always()` a failed build made
+      # Trivy report "unable to find the specified image", which buried the real
+      # build error under a misleading scanner failure.
       - name: Scan candidate image with Trivy
-        if: always() && inputs.scan
+        if: ${{ !cancelled() && inputs.scan && steps.smoke_build.outcome == 'success' }}
         continue-on-error: ${{ !inputs.block_on_scan_failure }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.74.0
           image-ref: mcp-smoke:${{ github.run_id }}
           format: table
           severity: HIGH,CRITICAL
