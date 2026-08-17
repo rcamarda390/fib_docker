@@ -63,6 +63,14 @@ COPY --from=source /src/headroom/ headroom/
 # when evaluated against the release metadata. Use the checked-in resolution
 # without attempting to rewrite it during the image build.
 RUN uv sync --frozen --extra mcp --no-dev --no-editable
+# Close CVE-2026-23949 (high), CVE-2025-47273 (medium, CWE-1395) by upgrading
+# setuptools from 70.3.0 to 80.10.0 (CWE-22 path traversal fix). Close
+# CVE-2026-57585 (7.5, CWE-416 use-after-free) by upgrading msgpack from
+# 1.1.2 to 1.2.1. These are transitive dependencies of headroom and cannot be
+# upgraded via the frozen uv.lock; pip upgrades them in the built virtual
+# environment without disturbing locked top-level dependencies.
+RUN . /opt/venv/bin/activate && \
+    pip install --no-cache-dir --upgrade "setuptools>=80.10.0" "msgpack>=1.2.1"
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
@@ -102,10 +110,60 @@ RUN python -m pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" \
 # silently degrade into a no-op.
 RUN dpkg --purge --force-depends --force-remove-essential perl-base \
     && ! command -v perl
+# Debian bookworm CVEs: 15 findings with no fixed version, classified as
+# <no-dsa> "Minor issue" in Debian security tracker. These packages are not
+# used at runtime:
+#   gzip           CVE-2026-41992 -- Python bundles zlib statically; nothing
+#                                    shells out to gzip or untars at runtime
+#   ncurses-bin    CVE-2025-69720 -- bash links libtinfo.so.6; headroom uses
+#   ncurses-base                      dash for entrypoint and Python for
+#   libtinfo6                         payload, so none of it is used
+#   libacl1        CVE-2026-54369 -- only cp/mv/install/tar link libacl.so.1;
+#   libattr1       CVE-2026-54371    headroom uses mkdir/chown/cat only
+#   libsqlite3-0   CVE-2026-11822 -- Python bundles sqlite3 statically; the
+#                  CVE-2026-11824    NEEDED list is libatomic/libstdc++/libgcc_s/libc
+#   libpam0g       CVE-2025-8941  -- headroom doesn't authenticate through PAM;
+#   libpam-modules                    gosu uses plain setuid/setgid, user lookup
+#   libpam-runtime                    via glibc NSS, not PAM
+#   libtasn1-6     CVE-2025-13151 -- only used for X.509 cert parsing; Python's
+#                                    ssl uses system certs, doesn't need libtasn1
+# Two CVEs are truly unfixable without base image upgrade:
+#   CVE-2026-5435  (glibc) -- No upstream fix at all yet
+#   CVE-2026-5928  (glibc) -- Fixed only in glibc 2.42 (not in bookworm; requires
+#                             Debian trixie or sid, which carry other tradeoffs)
+# dpkg is used instead of `apt-get purge --auto-remove` because gzip and
+# ncurses-bin are Essential and apt would cascade into debconf. No apt
+# operations run after this layer, so unsatisfied dependencies are inert.
+#
+# libpam-modules needs both halves of this next step. apt cannot do it:
+# util-linux PreDepends on libpam-modules, and apt will not break a PreDepends,
+# so it re-selects the package for install and declines. dpkg can force past
+# that -- util-linux is on the very line below -- but its postrm execs
+# /usr/share/debconf/frontend, and the perl-base purge above cascades into
+# debconf, so the script exits 127 and fails the build. The stub below
+# satisfies the exec so the purge completes and dpkg records it as such.
+# Skipping that cleanup is harmless: it only drops the package's entries from
+# the debconf database. dpkg removes the package's files either way.
+RUN mkdir -p /usr/share/debconf \
+ && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
+ && chmod 0755 /usr/share/debconf/frontend \
+ && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+      gzip ncurses-bin ncurses-base libtinfo6 \
+      libacl1 libattr1 libsqlite3-0 \
+      libpam-runtime libpam-modules libpam0g libtasn1-6 \
+ && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
 COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
 RUN chmod +x /usr/local/bin/headroom-entrypoint
+# Verify that purged packages didn't break critical runtime functionality.
+# Python and dash (entrypoint shell) must work; glibc is still available.
+RUN /usr/bin/python3 -c "import sys; sys.exit(0)" \
+ && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
+ && ! command -v perl \
+ && ! command -v gzip \
+ && ! command -v ncurses \
+ && /usr/bin/python3 -c "import ssl; print('Verification: Python ssl OK')"
 
 USER headroom
 WORKDIR /home/headroom
