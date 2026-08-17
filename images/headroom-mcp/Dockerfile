@@ -63,6 +63,14 @@ COPY --from=source /src/headroom/ headroom/
 # when evaluated against the release metadata. Use the checked-in resolution
 # without attempting to rewrite it during the image build.
 RUN uv sync --frozen --extra mcp --no-dev --no-editable
+# Close CVE-2026-23949 (high), CVE-2025-47273 (medium, CWE-1395) by upgrading
+# setuptools from 70.3.0 to 80.10.0 (CWE-22 path traversal fix). Close
+# CVE-2026-57585 (7.5, CWE-416 use-after-free) by upgrading msgpack from
+# 1.1.2 to 1.2.1. These are transitive dependencies of headroom and cannot be
+# upgraded via the frozen uv.lock; pip upgrades them in the built virtual
+# environment without disturbing locked top-level dependencies.
+RUN . /opt/venv/bin/activate && \
+    pip install --no-cache-dir --upgrade "setuptools>=80.10.0" "msgpack>=1.2.1"
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
