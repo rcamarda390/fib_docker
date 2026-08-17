@@ -69,7 +69,7 @@ RUN uv sync --frozen --extra mcp --no-dev --no-editable
 # 1.1.2 to 1.2.1. These are transitive dependencies of headroom and cannot be
 # upgraded via the frozen uv.lock; pip upgrades them in the built virtual
 # environment without disturbing locked top-level dependencies.
-RUN /opt/venv/bin/pip install --no-cache-dir --upgrade "setuptools>=80.10.0" "msgpack>=1.2.1"
+RUN /opt/venv/bin/python -m pip install --no-cache-dir --upgrade "setuptools>=80.10.0" "msgpack>=1.2.1"
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
