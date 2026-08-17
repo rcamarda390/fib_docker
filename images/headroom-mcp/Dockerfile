@@ -178,4 +178,4 @@ LABEL org.opencontainers.image.title="headroom-mcp" \
       org.opencontainers.image.version="${HEADROOM_VERSION}" \
       org.opencontainers.image.revision="${HEADROOM_COMMIT}"
 
-ENTRYPOINT ["headroom-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/headroom-entrypoint"]
