@@ -157,13 +157,13 @@ COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
 RUN chmod +x /usr/local/bin/headroom-entrypoint
 # Verify that purged packages didn't break critical runtime functionality.
-# Python and dash (entrypoint shell) must work; glibc is still available.
-RUN /usr/bin/python3 -c "import sys; sys.exit(0)" \
+# Python (from venv) and dash (entrypoint shell) must work; glibc is still available.
+RUN PATH="/opt/venv/bin:${PATH}" python -c "import sys; sys.exit(0)" \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && ! command -v perl \
  && ! command -v gzip \
  && ! command -v ncurses \
- && /usr/bin/python3 -c "import ssl; print('Verification: Python ssl OK')"
+ && PATH="/opt/venv/bin:${PATH}" python -c "import ssl; print('Verification: Python ssl OK')"
 
 USER headroom
 WORKDIR /home/headroom
