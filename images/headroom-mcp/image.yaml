@@ -1,6 +1,6 @@
 name: headroom-mcp
 upstream_version: 0.34.0
-revision: 8
+revision: 9
 build_args:
   HEADROOM_COMMIT: 9fd5ae3d530b5d9eb9e9127e413235a5a3b2faf6
 publish:
