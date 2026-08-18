@@ -82,12 +82,10 @@ FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
 ARG PYTHON_VERSION
-ARG PIP_VERSION
 
 ENV HEADROOM_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PATH=/opt/venv/bin:${PATH}
 
 RUN apt-get update \
@@ -97,10 +95,30 @@ RUN apt-get update \
       --shell /usr/sbin/nologin headroom \
     && mkdir -p /home/headroom/.headroom \
     && chown -R headroom:headroom /home/headroom
-# Keep the base interpreter's pip out of the scanner's vulnerable range even
-# though the application itself runs from the locked virtual environment.
-RUN python -m pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" \
-    && rm -rf /root/.cache
+# Remove the base interpreter's pip instead of upgrading it. Nothing in this
+# image runs pip: the payload is /opt/venv, which uv builds without seeding
+# pip, and the entrypoint invokes /opt/venv/bin/headroom directly.
+#
+# Upgrading pip here is what put the scanner's three "fixable" findings in the
+# image in the first place. pip vendors its own dependency tree, and
+# pip 26.2.1's pip/_vendor/vendor.txt pins exactly the versions reported:
+#   setuptools==70.3.0  -> CVE-2026-23949, CVE-2025-47273
+#   msgpack==1.1.2      -> CVE-2026-57585
+# Bumping PIP_VERSION cannot fix those, because the vendored pins travel with
+# whatever pip release is installed; only removing pip removes the files. The
+# ensurepip bundled wheel carries the same vendored tree, so it goes too.
+#
+# Neither finding was reachable -- nothing invokes pip at runtime, and the
+# vendored msgpack is the pure-Python fallback with no _cmsgpack extension,
+# while CVE-2026-57585 is a use-after-free that can only exist in the C
+# extension -- but the code is genuinely gone now rather than argued away.
+# The verification at the end of this stage asserts pip is absent, so this
+# cannot silently regress into a no-op.
+RUN rm -rf /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip \
+           /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip-*.dist-info \
+           /usr/local/lib/python${PYTHON_VERSION}/ensurepip/_bundled \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip${PYTHON_VERSION} \
+           /root/.cache
 # Every perl-base CVE the scanner reports against bookworm is published with no
 # fixed version, so `apt-get upgrade` above cannot clear them. Nothing in this
 # image invokes perl: the entrypoint is dash and the payload is Python plus a
@@ -200,7 +218,9 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && ! command -v perl \
  && ! command -v gzip \
- && ! command -v tput
+ && ! command -v tput \
+ && ! command -v pip \
+ && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
 
 USER headroom
 WORKDIR /home/headroom
