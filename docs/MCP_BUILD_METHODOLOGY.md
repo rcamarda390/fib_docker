@@ -103,7 +103,7 @@ and the compiler version out of the binary's own build info, so every entry in
 toolchain that compiled the binary — is one too. Bumping the builder base image
 is therefore part of remediation, not housekeeping.
 
-Two rules follow from that:
+Three rules follow from that:
 
 1. **Upgrade to the fix version; never downgrade.** An older release is not a
    remediated release. `bifrost-mcp` was once "fixed" by moving go-git from
@@ -117,6 +117,13 @@ Two rules follow from that:
    the upgrade and the stamped toolchain with `go version -m` on the built
    binary, so a pin that silently stops applying fails the build instead of
    shipping.
+3. **One advisory can name more than one module.** Raising the module a finding
+   is reported against does not clear the same advisory where it is reported
+   against a sibling. XRAY-1032962 and XRAY-1032963 were answered on
+   `go-openapi/spec` in `1.6.11-v7`; the `-v8` scan reported both again against
+   `go-openapi/validate` v0.25.1, which upstream requires separately and which
+   MVS therefore left untouched. After remediating, re-scan and pin whatever the
+   next report names — a pin covers the module it names and nothing else.
 
 Pins belong in the Dockerfile with the finding they answer recorded next to
 them, and they come out again once upstream's own `go.mod` requires that

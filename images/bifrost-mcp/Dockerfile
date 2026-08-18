@@ -12,8 +12,11 @@ ARG GO_VERSION=1.26.6
 
 # Module versions that clear the Xray findings against upstream v1.6.11's
 # transports/go.mod:
-#   x/text v0.37.0            CVE-2026-56852 (7.5), fixed in v0.39.0
-#   x/net v0.55.0             CVE-2026-46600 (7.5), fixed in v0.56.0
+#   x/text v0.37.0            CVE-2026-56852 (7.5), fixed in v0.39.0; v0.40.0
+#                             is the version go-openapi/validate v0.26.1
+#                             itself requires, so MVS lands there
+#   x/net v0.55.0             CVE-2026-46600 (7.5), fixed in v0.56.0; v0.57.0
+#                             is required by validate v0.26.1 the same way
 #   go-git/v5 v5.19.1         CVE-2026-71556 (7.1), CVE-2026-71557 (6.3),
 #                             fixed in v5.19.2
 #   go-openapi/spec v0.22.3   XRAY-1032958/1032961/1032962, fixed in v0.22.7,
@@ -21,12 +24,23 @@ ARG GO_VERSION=1.26.6
 #   swag/{json,yaml}utils     XRAY-1032959/1032960 against v0.25.4, fixed in
 #                             v0.27.1; v0.27.3 is the version go-openapi/spec
 #                             v0.22.9 itself requires, so MVS lands there
+#   go-openapi/validate       XRAY-1032963 (9.3, CWE-918) and XRAY-1032962
+#     v0.25.1                 (5.3, CWE-400), fixed in v0.26.1. These are the
+#                             same two advisories the spec pin above answers,
+#                             reported a second time against validate: it is a
+#                             separate module upstream requires on its own, so
+#                             raising spec left it behind at v0.25.1 and the
+#                             1.6.11-v8 scan still flagged it. Pulls the rest
+#                             of the go-openapi stack up with it (analysis
+#                             v0.25.5, loads v0.25.0, strfmt v0.27.0,
+#                             errors v0.22.8).
 # Drop a pin once upstream's own go.mod requires that version or newer.
-ARG GO_TEXT_VERSION=v0.39.0
-ARG GO_NET_VERSION=v0.56.0
+ARG GO_TEXT_VERSION=v0.40.0
+ARG GO_NET_VERSION=v0.57.0
 ARG GO_GIT_VERSION=v5.19.2
 ARG GO_OPENAPI_SPEC_VERSION=v0.22.9
 ARG GO_OPENAPI_SWAG_VERSION=v0.27.3
+ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
 
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG BIFROST_VERSION
@@ -72,6 +86,7 @@ ARG GO_NET_VERSION
 ARG GO_GIT_VERSION
 ARG GO_OPENAPI_SPEC_VERSION
 ARG GO_OPENAPI_SWAG_VERSION
+ARG GO_OPENAPI_VALIDATE_VERSION
 RUN set -eu; \
     GOFLAGS=-mod=mod go get \
       "golang.org/x/text@${GO_TEXT_VERSION}" \
@@ -79,14 +94,16 @@ RUN set -eu; \
       "github.com/go-git/go-git/v5@${GO_GIT_VERSION}" \
       "github.com/go-openapi/spec@${GO_OPENAPI_SPEC_VERSION}" \
       "github.com/go-openapi/swag/jsonutils@${GO_OPENAPI_SWAG_VERSION}" \
-      "github.com/go-openapi/swag/yamlutils@${GO_OPENAPI_SWAG_VERSION}"; \
+      "github.com/go-openapi/swag/yamlutils@${GO_OPENAPI_SWAG_VERSION}" \
+      "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}"; \
     for pin in \
       "golang.org/x/text=${GO_TEXT_VERSION}" \
       "golang.org/x/net=${GO_NET_VERSION}" \
       "github.com/go-git/go-git/v5=${GO_GIT_VERSION}" \
       "github.com/go-openapi/spec=${GO_OPENAPI_SPEC_VERSION}" \
       "github.com/go-openapi/swag/jsonutils=${GO_OPENAPI_SWAG_VERSION}" \
-      "github.com/go-openapi/swag/yamlutils=${GO_OPENAPI_SWAG_VERSION}"; \
+      "github.com/go-openapi/swag/yamlutils=${GO_OPENAPI_SWAG_VERSION}" \
+      "github.com/go-openapi/validate=${GO_OPENAPI_VALIDATE_VERSION}"; \
     do \
       module="${pin%=*}"; expected="${pin##*=}"; \
       resolved="$(go list -m -f '{{.Version}}' "$module")"; \
