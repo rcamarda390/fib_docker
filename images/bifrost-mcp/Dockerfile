@@ -2,11 +2,11 @@
 
 ARG BIFROST_VERSION=1.6.11
 ARG BIFROST_COMMIT=0a8a38c983b7b932a3f7b4e85adeac08ad99b497
-ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
-ARG GO_GIT_VERSION=v5.19.2
-ARG GRPC_VERSION=v1.82.1
+ARG GO_OPENAPI_VALIDATE_VERSION=v0.27.0
+ARG GO_GIT_VERSION=v5.12.0
+ARG GRPC_VERSION=v1.68.0
 
-FROM alpine:3.23.5@sha256:1beb0dc0a51de7ff38e3b5274078a2e0b81113ba5c7535e1a03d5913a5edbda3 AS source
+FROM alpine:3.21.10 AS source
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 RUN apk add --no-cache ca-certificates git \
@@ -14,14 +14,14 @@ RUN apk add --no-cache ca-certificates git \
        https://github.com/maximhq/bifrost.git /src \
     && test "$(git -C /src rev-parse HEAD)" = "$BIFROST_COMMIT"
 
-FROM node:25-alpine3.23@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS ui-builder
+FROM node:22-alpine3.21 AS ui-builder
 WORKDIR /app
 COPY --from=source /src/ui/package*.json ./
 RUN npm ci
 COPY --from=source /src/ui/ ./
 RUN npm run build-enterprise
 
-FROM golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc AS builder
+FROM golang:1.23.4-alpine3.21 AS builder
 ARG GO_GIT_VERSION
 ARG GRPC_VERSION
 WORKDIR /build
@@ -76,7 +76,7 @@ RUN cd /build/transports \
        -a -trimpath -tags sqlite_static -o /app/main ./bifrost-http \
     && test -f /app/main
 
-FROM alpine:3.23.5@sha256:1beb0dc0a51de7ff38e3b5274078a2e0b81113ba5c7535e1a03d5913a5edbda3
+FROM alpine:3.21.10
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 WORKDIR /app
@@ -85,7 +85,7 @@ ENV APP_DIR=/app/data \
     APP_HOST=0.0.0.0 \
     LOG_LEVEL=info \
     LOG_STYLE=json
-RUN apk add --no-cache musl libgcc ca-certificates zlib=1.3.2-r0 \
+RUN apk add --no-cache musl libgcc ca-certificates zlib \
     && adduser -D -s /bin/sh appuser
 COPY --from=builder /app/main .
 COPY --from=source /src/transports/docker-entrypoint.sh .
