@@ -1,6 +1,6 @@
 name: bifrost-mcp
 upstream_version: 1.6.11
-revision: 2
+revision: 3
 build_args:
   BIFROST_COMMIT: 0a8a38c983b7b932a3f7b4e85adeac08ad99b497
   GO_OPENAPI_VALIDATE_VERSION: v0.26.1
