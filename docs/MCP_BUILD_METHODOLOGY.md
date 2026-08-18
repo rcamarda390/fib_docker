@@ -94,3 +94,30 @@ stdlib modules whose backing libraries a purge could remove and exercises
 surfacing later as an opaque MCP startup error. Guards must also be falsifiable:
 `! command -v ncurses` never fails, because no `ncurses` binary exists in any
 image — `ncurses-bin` ships `tput`, which is what the check now tests.
+
+## Triaging scanner findings against Go binaries
+
+Go images are scanned differently from Debian ones. Xray reads the module graph
+and the compiler version out of the binary's own build info, so every entry in
+`go list -m all` is a scanned component and `github.com/golang/go` — the
+toolchain that compiled the binary — is one too. Bumping the builder base image
+is therefore part of remediation, not housekeeping.
+
+Two rules follow from that:
+
+1. **Upgrade to the fix version; never downgrade.** An older release is not a
+   remediated release. `bifrost-mcp` was once "fixed" by moving go-git from
+   v5.19.2 to v5.12.0 and Go from 1.26.5 to 1.23.4 — every one of those moves
+   walked *away* from the versions the scanner asked for, and all of it was
+   reverted. Read the Fix Version column and go to it or past it.
+2. **Prove the upgrade reached the binary.** `go get` sets a minimum, and
+   minimal version selection may settle a module higher to satisfy another
+   module's requirement — `go-openapi/spec` v0.22.9 is what drags the swag
+   submodules to v0.27.3. Assert the resolved versions with `go list -m` after
+   the upgrade and the stamped toolchain with `go version -m` on the built
+   binary, so a pin that silently stops applying fails the build instead of
+   shipping.
+
+Pins belong in the Dockerfile with the finding they answer recorded next to
+them, and they come out again once upstream's own `go.mod` requires that
+version or newer.
