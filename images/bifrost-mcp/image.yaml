@@ -1,11 +1,11 @@
 name: bifrost-mcp
 upstream_version: 1.6.11
-revision: 3
+revision: 4
 build_args:
   BIFROST_COMMIT: 0a8a38c983b7b932a3f7b4e85adeac08ad99b497
-  GO_OPENAPI_VALIDATE_VERSION: v0.26.1
-  GO_GIT_VERSION: v5.19.2
-  GRPC_VERSION: v1.82.1
+  GO_OPENAPI_VALIDATE_VERSION: v0.27.0
+  GO_GIT_VERSION: v5.12.0
+  GRPC_VERSION: v1.68.0
 publish:
   ghcr: true
   dockerhub: true
