@@ -6,7 +6,7 @@ ARG GO_OPENAPI_VALIDATE_VERSION=v0.27.0
 ARG GO_GIT_VERSION=v5.12.0
 ARG GRPC_VERSION=v1.68.0
 
-FROM alpine:3.21.10 AS source
+FROM alpine:3.21 AS source
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 RUN apk add --no-cache ca-certificates git \
@@ -76,7 +76,7 @@ RUN cd /build/transports \
        -a -trimpath -tags sqlite_static -o /app/main ./bifrost-http \
     && test -f /app/main
 
-FROM alpine:3.21.10
+FROM alpine:3.21
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 WORKDIR /app
