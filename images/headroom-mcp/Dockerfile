@@ -115,24 +115,52 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 # Debian bookworm CVEs: 15 findings with no fixed version, classified as
 # <no-dsa> "Minor issue" in Debian security tracker. These packages are not
 # used at runtime:
-#   gzip           CVE-2026-41992 -- Python bundles zlib statically; nothing
-#                                    shells out to gzip or untars at runtime
+#   gzip           CVE-2026-41992 -- nothing shells out to gzip or untars at
+#                                    runtime. Note this is the gzip *binary*
+#                                    only: Python's zlib module links
+#                                    libz.so.1 from zlib1g dynamically, so
+#                                    zlib1g itself must stay.
 #   ncurses-bin    CVE-2025-69720 -- bash links libtinfo.so.6; headroom uses
 #   ncurses-base                      dash for entrypoint and Python for
 #   libtinfo6                         payload, so none of it is used
 #   libacl1        CVE-2026-54369 -- only cp/mv/install/tar link libacl.so.1;
 #   libattr1       CVE-2026-54371    headroom uses mkdir/chown/cat only
-#   libsqlite3-0   KEPT -- Python 3.13's sqlite3 module dynamically links to
-#                        libsqlite3.so.0, so this library cannot be removed
 #   libpam0g       CVE-2025-8941  -- headroom doesn't authenticate through PAM;
 #   libpam-modules                    gosu uses plain setuid/setgid, user lookup
 #   libpam-runtime                    via glibc NSS, not PAM
 #   libtasn1-6     CVE-2025-13151 -- only used for X.509 cert parsing; Python's
 #                                    ssl uses system certs, doesn't need libtasn1
+#
+# libsqlite3-0 is deliberately NOT purged, and must not be added to the list
+# below. Python 3.13's sqlite3 is a dynamically linked extension
+# (lib-dynload/_sqlite3.*.so -> libsqlite3.so.0), and headroom imports sqlite3
+# on the `mcp serve` path (compression cache store, memory store, Codex thread
+# recovery). Purging it builds a green image that dies at startup with
+# "ImportError: libsqlite3.so.0: cannot open shared object file". That shipped
+# once and had to be reverted; the verification step at the end of this stage
+# now fails the build if it ever happens again.
+#
+# The scanner reports bookworm's libsqlite3-0 3.40.1-2+deb12u2 as CVE-2025-7458
+# (CVSS 9.1, CWE-190), and Debian additionally tracks CVE-2025-7709 and
+# CVE-2026-11822/-11824/-50812/-50813 against it. Every one is <no-dsa> "Minor
+# issue" with no fixed version for bookworm -- CVE-2025-7458 is fixed only in
+# 3.42.0-1 -- so `apt-get upgrade` above can never clear them. CVE-2025-7458
+# requires an attacker who can execute arbitrary SQL; upstream's fix (check-in
+# 12ad822d9b827777) is a query-planner correctness fix for
+# `SELECT DISTINCT <constant terms> ... ORDER BY`, not memory corruption.
+# headroom builds all of its own SQL and never executes SQL supplied by an MCP
+# client, so that precondition does not exist here. Actually clearing the
+# finding requires SQLite >= 3.42, i.e. a base-image move to trixie or a
+# vendored upstream SQLite -- a deliberate change, not a purge.
 # Two CVEs are truly unfixable without base image upgrade:
 #   CVE-2026-5435  (glibc) -- No upstream fix at all yet
-#   CVE-2026-5928  (glibc) -- Fixed only in glibc 2.42 (not in bookworm; requires
-#                             Debian trixie or sid, which carry other tradeoffs)
+#   CVE-2026-5928  (glibc) -- Fixed only in glibc 2.42. trixie ships 2.41, so a
+#                             move to trixie would NOT clear it; 2.42 first
+#                             appears in forky/sid. The same is true of
+#                             CVE-2026-5450, which the scanner reports against
+#                             libc-bin: <no-dsa> in bookworm and trixie alike.
+#                             It needs scanf("%mc") with an explicit field width
+#                             above 1024, which CPython never calls.
 # dpkg is used instead of `apt-get purge --auto-remove` because gzip and
 # ncurses-bin are Essential and apt would cascade into debconf. No apt
 # operations run after this layer, so unsatisfied dependencies are inert.
@@ -159,13 +187,20 @@ COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
 RUN chmod +x /usr/local/bin/headroom-entrypoint
 # Verify that purged packages didn't break critical runtime functionality.
-# Python (from venv) and dash (entrypoint shell) must work; glibc is still available.
-RUN PATH="/opt/venv/bin:${PATH}" python -c "import sys; sys.exit(0)" \
+# `python -c "import sys"` proved nothing: it passed while libsqlite3-0 was
+# purged, so a green build shipped an image that died on startup. Import every
+# stdlib module whose backing shared library a purge could plausibly remove and
+# actually exercise sqlite3 and ssl, so a bad purge fails here -- in the stage
+# that caused it -- instead of surfacing later as an opaque MCP startup error.
+RUN PATH="/opt/venv/bin:${PATH}" python -c \
+    "import ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
+     sqlite3.connect(':memory:').execute('select 1').fetchone(); \
+     ssl.create_default_context(); \
+     print('Verification: Python stdlib (sqlite3, ssl, compression) OK')" \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && ! command -v perl \
  && ! command -v gzip \
- && ! command -v ncurses \
- && PATH="/opt/venv/bin:${PATH}" python -c "import ssl; print('Verification: Python ssl OK')"
+ && ! command -v tput
 
 USER headroom
 WORKDIR /home/headroom
