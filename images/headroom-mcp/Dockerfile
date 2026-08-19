@@ -93,8 +93,7 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 # Timeout/retry handling: HF downloads can timeout; skip this step if network fails.
 ENV HF_HOME=/opt/headroom-cache/huggingface
 RUN mkdir -p /opt/headroom-cache/huggingface || true
-RUN PATH="/opt/venv/bin:${PATH}" bash << 'BASH_SCRIPT'
-python << 'HFCACHE'
+RUN bash -c 'PATH="/opt/venv/bin:${PATH}" python << '"'"'HFCACHE'"'"'
 import os
 import sys
 from huggingface_hub import hf_hub_download
@@ -118,33 +117,33 @@ for onnx_file in kompress_onnx_files:
         hf_hub_download(
             repo_id=kompress_model,
             filename=onnx_file,
-            repo_type='model',
+            repo_type="model",
             resume_download=True,
             force_download=False,
         )
-        print(f'✓ Downloaded {kompress_model}/{onnx_file}')
+        print(f"✓ Downloaded {kompress_model}/{onnx_file}")
         onnx_success = True
         break  # Use first successfully downloaded artifact
     except Exception as e:
-        print(f'⚠ Could not download {onnx_file}: {e}')
+        print(f"⚠ Could not download {onnx_file}: {e}")
 
 if not onnx_success:
-    print('⚠ Warning: Could not download Kompress ONNX artifact, models will be downloaded at runtime')
+    print("⚠ Warning: Could not download Kompress ONNX artifact, models will be downloaded at runtime")
 else:
     # Download tokenizer from ModernBERT-base (Kompress reuses this exact tokenizer)
-    tokenizer_model = 'answerdotai/ModernBERT-base'
+    tokenizer_model = "answerdotai/ModernBERT-base"
     try:
         AutoTokenizer.from_pretrained(
             tokenizer_model,
             trust_remote_code=True,
         )
-        print(f'✓ Downloaded tokenizer from {tokenizer_model}')
+        print(f"✓ Downloaded tokenizer from {tokenizer_model}")
     except Exception as e:
-        print(f'⚠ Warning: Could not download tokenizer from {tokenizer_model}: {e}')
+        print(f"⚠ Warning: Could not download tokenizer from {tokenizer_model}: {e}")
 
-print('✓ Hugging Face model cache population completed (may be partial)')
+print("✓ Hugging Face model cache population completed (may be partial)")
 HFCACHE
-BASH_SCRIPT
+'
 
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
