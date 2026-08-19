@@ -95,11 +95,24 @@ RUN mkdir -p /opt/headroom-cache/huggingface && \
     PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE'
 import os
 import sys
+import time
 from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer
 
 hf_home = '/opt/headroom-cache/huggingface'
 os.environ['HF_HOME'] = hf_home
+
+def download_with_retry(download_fn, max_retries=3, timeout_seconds=300):
+    """Retry download with exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            return download_fn()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            wait_time = 2 ** attempt
+            print(f'⚠ Attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait_time}s...')
+            time.sleep(wait_time)
 
 # Download Kompress model artifacts: prefer int8-wo (weight-only quantized),
 # fallback to fp32 and older int8 for compatibility
@@ -113,13 +126,13 @@ kompress_onnx_files = [
 onnx_success = False
 for onnx_file in kompress_onnx_files:
     try:
-        hf_hub_download(
+        download_with_retry(lambda: hf_hub_download(
             repo_id=kompress_model,
             filename=onnx_file,
             repo_type='model',
             resume_download=True,
             force_download=False,
-        )
+        ))
         print(f'✓ Downloaded {kompress_model}/{onnx_file}')
         onnx_success = True
         break  # Use first successfully downloaded artifact
@@ -134,10 +147,10 @@ if not onnx_success:
 tokenizer_model = 'answerdotai/ModernBERT-base'
 tokenizer_success = False
 try:
-    AutoTokenizer.from_pretrained(
+    download_with_retry(lambda: AutoTokenizer.from_pretrained(
         tokenizer_model,
         trust_remote_code=True,
-    )
+    ))
     print(f'✓ Downloaded tokenizer from {tokenizer_model}')
     tokenizer_success = True
 except Exception as e:
