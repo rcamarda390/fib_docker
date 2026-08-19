@@ -441,7 +441,19 @@ jobs:
           NEXT_REVISION: ${{ steps.revision.outputs.next_revision }}
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
           REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN is subject to the "Allow GitHub Actions to create and
+          # approve pull requests" setting, which refused three consecutive runs
+          # with `GitHub Actions is not permitted to create or approve pull
+          # requests (createPullRequest)` even after the repo checkbox was
+          # believed to be on. A fine-grained PAT (contents + pull-requests:
+          # write) is not subject to it. Falls back to the built-in token when
+          # the secret is absent, so repos that do have the setting enabled keep
+          # working with no secret to manage.
+          #
+          # Safe against recursion: no workflow here triggers `on: pull_request`,
+          # so the PR this opens starts nothing, even though PAT-authored PRs --
+          # unlike GITHUB_TOKEN ones -- are allowed to trigger workflows.
+          GH_TOKEN: ${{ secrets.REVISION_PR_TOKEN || secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -486,11 +498,33 @@ jobs:
             printf '> same revision from `%s` and republishes the same tag.\n' "$BASE"
           } > /tmp/revision_pr_body.md
 
-          pr_url=$(gh pr create \
+          # Still fatal -- a bump that never lands means the next build reuses
+          # the tag -- but the summary now says exactly what to do, so the run
+          # page alone is enough to diagnose and recover from it.
+          if pr_url=$(gh pr create \
             --repo "$REPO" \
             --base "$BASE" \
             --head "$head_branch" \
             --title "chore: increment ${IMAGE_NAME} image revision to ${NEXT_REVISION} [skip ci]" \
-            --body-file /tmp/revision_pr_body.md)
-          echo "Opened revision PR: ${pr_url}"
-          echo "Revision bump proposed: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
+            --body-file /tmp/revision_pr_body.md 2>/tmp/revision_pr_err); then
+            echo "Opened revision PR: ${pr_url}"
+            echo "Revision bump proposed: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          err=$(cat /tmp/revision_pr_err)
+          echo "::error::Could not open the revision PR: ${err}"
+          {
+            printf '## Revision bump PR could not be opened\n\n'
+            printf 'The image published fine as `%s`. Only the bookkeeping PR failed.\n\n' "$IMAGE_TAG"
+            printf 'Branch `%s` is pushed and carries the bump to `revision: %s`:\n\n' "$head_branch" "$NEXT_REVISION"
+            printf -- '- **[Open the PR](https://github.com/%s/compare/%s...%s?expand=1)**\n\n' "$REPO" "$BASE" "$head_branch"
+            printf '```\n%s\n```\n\n' "$err"
+            printf 'If that says Actions is not permitted to create pull requests, either set a\n'
+            printf '`REVISION_PR_TOKEN` secret (fine-grained PAT with contents + pull-requests\n'
+            printf 'write), or enable Settings -> Actions -> General -> Workflow permissions ->\n'
+            printf '"Allow GitHub Actions to create and approve pull requests" -- note that is a\n'
+            printf 'separate checkbox from the read/write radio above it, and an account-level\n'
+            printf 'setting at github.com/settings/actions can override the repo one.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
