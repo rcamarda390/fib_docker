@@ -52,9 +52,26 @@ while retry_count < max_retries:
     retry_count += 1
     time.sleep(0.5)
 
+def dump_proxy_logs():
+    """Print the proxy's captured output.
+
+    stdout/stderr are piped, so without this every proxy-side failure reaches CI
+    as an opaque one-liner ("timed out") with the real traceback trapped in the
+    pipe. Called only on failure paths.
+    """
+    try:
+        process.terminate()
+        out, err = process.communicate(timeout=10)
+    except Exception:
+        return
+    for label, stream in (("stdout", out), ("stderr", err)):
+        if stream and stream.strip():
+            print(f"----- proxy {label} (last 40 lines) -----", file=sys.stderr)
+            print("\n".join(stream.strip().splitlines()[-40:]), file=sys.stderr)
+
+
 if retry_count >= max_retries:
-    process.terminate()
-    process.wait(timeout=5)
+    dump_proxy_logs()
     raise SystemExit("Proxy server failed to start within 15 seconds")
 
 try:
@@ -88,7 +105,10 @@ try:
     #   transforms_applied, ccr_hashes
     compress_url = "http://localhost:8787/v1/compress"
 
-    def compress(body, timeout=5):
+    # The first request builds tokenizers and loads the Kompress ONNX model out
+    # of the baked-in cache, which is far slower than steady-state. The workflow
+    # caps the whole run via `smoke_timeout`, so this is the inner bound.
+    def compress(body, timeout=90):
         """POST to /v1/compress and return the decoded JSON response."""
         request = urllib.request.Request(
             compress_url,
@@ -140,11 +160,13 @@ try:
         else:
             # Any other HTTP error indicates a real problem (500, 422, 503, etc.)
             error_body = e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else ""
+            dump_proxy_logs()
             raise SystemExit(
                 f"Compression endpoint HTTP {e.code}: {error_body[:200]}\n"
                 f"This image cannot support compression in the air-gapped environment."
             )
     except Exception as e:
+        dump_proxy_logs()
         raise SystemExit(f"Compression test failed: {e}")
 
     # A Kompress-specific probe (config.mode="lossy_inline") would exercise the
