@@ -21,7 +21,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from mcp_atlassian.confluence.config import ConfluenceConfig
 from mcp_atlassian.jira.config import JiraConfig
 from mcp_atlassian.utils.env import is_env_truthy
 from mcp_atlassian.utils.environment import get_available_services
@@ -42,7 +41,6 @@ from mcp_atlassian.utils.toolsets import (
 from mcp_atlassian.utils.urls import is_atlassian_cloud_url, validate_url_for_ssrf
 
 from .client_storage import build_oauth_client_storage_from_env
-from .confluence import confluence_mcp
 from .context import MainAppContext
 from .error_handling import ErrorPreservingFastMCP
 from .jira import jira_mcp
@@ -144,7 +142,6 @@ async def main_lifespan(app: FastMCP[MainAppContext]) -> AsyncIterator[dict[str,
     enabled_toolsets = get_enabled_toolsets()
 
     loaded_jira_config: JiraConfig | None = None
-    loaded_confluence_config: ConfluenceConfig | None = None
 
     if services.get("jira"):
         try:
@@ -161,24 +158,9 @@ async def main_lifespan(app: FastMCP[MainAppContext]) -> AsyncIterator[dict[str,
         except Exception as e:
             logger.error(f"Failed to load Jira configuration: {e}", exc_info=True)
 
-    if services.get("confluence"):
-        try:
-            confluence_config = ConfluenceConfig.from_env()
-            if confluence_config.is_auth_configured():
-                loaded_confluence_config = confluence_config
-                logger.info(
-                    "Confluence configuration loaded and authentication is configured."
-                )
-            else:
-                logger.warning(
-                    "Confluence URL found, but authentication is not fully configured. Confluence tools will be unavailable."
-                )
-        except Exception as e:
-            logger.error(f"Failed to load Confluence configuration: {e}", exc_info=True)
-
     app_context = MainAppContext(
         full_jira_config=loaded_jira_config,
-        full_confluence_config=loaded_confluence_config,
+        full_confluence_config=None,
         read_only=read_only,
         enabled_tools=enabled_tools,
         enabled_toolsets=enabled_toolsets,
@@ -199,8 +181,6 @@ async def main_lifespan(app: FastMCP[MainAppContext]) -> AsyncIterator[dict[str,
             # Close any open connections if needed
             if loaded_jira_config:
                 logger.debug("Cleaning up Jira resources...")
-            if loaded_confluence_config:
-                logger.debug("Cleaning up Confluence resources...")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}", exc_info=True)
         logger.info("Main Atlassian MCP server lifespan shutdown complete.")
@@ -258,7 +238,7 @@ class AtlassianMCP(ErrorPreservingFastMCP[MainAppContext]):
             else None
         )
 
-        header_based_services = {"jira": False, "confluence": False}
+        header_based_services = {"jira": False}
         service_headers: dict[str, str] = {}
         request = getattr(req_context, "request", None)
         if request is not None:
@@ -334,24 +314,14 @@ class AtlassianMCP(ErrorPreservingFastMCP[MainAppContext]):
         tool_tags = tool_obj.tags
 
         is_jira_tool = "jira" in tool_tags
-        is_confluence_tool = "confluence" in tool_tags
         if app_lifespan_state:
             jira_available = (
                 app_lifespan_state.full_jira_config is not None
             ) or header_based_services.get("jira", False)
-            confluence_available = (
-                app_lifespan_state.full_confluence_config is not None
-            ) or header_based_services.get("confluence", False)
             if is_jira_tool and not jira_available:
                 return False
-            if is_confluence_tool and not confluence_available:
-                return False
-        elif is_jira_tool or is_confluence_tool:
-            if is_jira_tool and not header_based_services.get("jira", False):
-                return False
-            if is_confluence_tool and not header_based_services.get(
-                "confluence", False
-            ):
+        elif is_jira_tool:
+            if not header_based_services.get("jira", False):
                 return False
         return True
 
@@ -597,10 +567,6 @@ class UserTokenMiddleware:
             # Extract additional Atlassian service headers for service availability detection
             jira_token_header = headers.get(b"x-atlassian-jira-personal-token")
             jira_url_header = headers.get(b"x-atlassian-jira-url")
-            confluence_token_header = headers.get(
-                b"x-atlassian-confluence-personal-token"
-            )
-            confluence_url_header = headers.get(b"x-atlassian-confluence-url")
 
             # Convert service header bytes to strings
             jira_token_str = (
@@ -608,16 +574,6 @@ class UserTokenMiddleware:
             )
             jira_url_str = (
                 jira_url_header.decode("latin-1") if jira_url_header else None
-            )
-            confluence_token_str = (
-                confluence_token_header.decode("latin-1")
-                if confluence_token_header
-                else None
-            )
-            confluence_url_str = (
-                confluence_url_header.decode("latin-1")
-                if confluence_url_header
-                else None
             )
 
             # Validate URLs to prevent SSRF
@@ -629,26 +585,12 @@ class UserTokenMiddleware:
                     )
                     return
 
-            if confluence_url_str:
-                ssrf_error = validate_url_for_ssrf(confluence_url_str)
-                if ssrf_error:
-                    scope["state"]["auth_validation_error"] = (
-                        f"Forbidden: Invalid Confluence URL - {ssrf_error}"
-                    )
-                    return
-
             # Build service headers dict
             service_headers = {}
             if jira_token_str:
                 service_headers["X-Atlassian-Jira-Personal-Token"] = jira_token_str
             if jira_url_str:
                 service_headers["X-Atlassian-Jira-Url"] = jira_url_str
-            if confluence_token_str:
-                service_headers["X-Atlassian-Confluence-Personal-Token"] = (
-                    confluence_token_str
-                )
-            if confluence_url_str:
-                service_headers["X-Atlassian-Confluence-Url"] = confluence_url_str
 
             scope["state"]["atlassian_service_headers"] = service_headers
             if service_headers:
@@ -920,7 +862,6 @@ main_mcp = AtlassianMCP(
     auth=_build_auth_provider(),
 )
 main_mcp.mount(jira_mcp, namespace="jira")
-main_mcp.mount(confluence_mcp, namespace="confluence")
 
 
 @main_mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
