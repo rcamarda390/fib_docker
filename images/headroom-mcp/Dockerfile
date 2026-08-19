@@ -93,7 +93,8 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 # Timeout/retry handling: HF downloads can timeout; skip this step if network fails.
 ENV HF_HOME=/opt/headroom-cache/huggingface
 RUN mkdir -p /opt/headroom-cache/huggingface || true
-RUN PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE'
+RUN PATH="/opt/venv/bin:${PATH}" bash << 'BASH_SCRIPT'
+python << 'HFCACHE'
 import os
 import sys
 from huggingface_hub import hf_hub_download
@@ -143,6 +144,7 @@ else:
 
 print('✓ Hugging Face model cache population completed (may be partial)')
 HFCACHE
+BASH_SCRIPT
 
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
