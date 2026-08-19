@@ -71,7 +71,7 @@ try:
         raise SystemExit(f"Dashboard check failed with status {response.status}")
     print("✓ Proxy dashboard OK")
 
-    # Test compression endpoint
+    # Test compression endpoint — this is critical for air-gapped operation
     print("\nTesting compression functionality...")
     test_content = """
     The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.
@@ -85,6 +85,7 @@ try:
         "method": "kompress"
     }).encode('utf-8')
 
+    compression_ok = False
     try:
         request = urllib.request.Request(
             compress_url,
@@ -105,14 +106,23 @@ try:
                 print("  ⚠ Compression minimal (likely validation-only passthrough)")
             else:
                 print("  ✓ Significant compression achieved")
+            compression_ok = True
         else:
-            print(f"⚠ Compression endpoint returned status {response.status}")
+            raise SystemExit(f"Compression endpoint returned error status {response.status}")
     except urllib.error.HTTPError as e:
-        # Some endpoints may not be available, that's OK
         if e.code == 404:
-            print(f"⚠ Compression endpoint not available (404) - may be normal for this configuration")
+            # Endpoint doesn't exist; this is a configuration/version issue, not a runtime failure
+            print(f"⚠ Compression endpoint not available (404) — skipping compression test")
+            print(f"   (Headroom version may not expose /v1/compress endpoint)")
         else:
-            print(f"⚠ Compression endpoint error: {e.code}")
+            # Any other HTTP error indicates a real problem (500, 422, 503, etc.)
+            error_body = e.read().decode('utf-8', errors='ignore') if hasattr(e, 'read') else ""
+            raise SystemExit(
+                f"Compression endpoint HTTP {e.code}: {error_body[:200]}\n"
+                f"This image cannot support compression in the air-gapped environment."
+            )
+    except Exception as e:
+        raise SystemExit(f"Compression test failed: {e}")
 
     print("\n✓ All smoke tests passed")
 

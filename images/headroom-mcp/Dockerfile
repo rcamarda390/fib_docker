@@ -94,6 +94,7 @@ ENV HF_HOME=/opt/headroom-cache/huggingface
 RUN mkdir -p /opt/headroom-cache/huggingface && \
     PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE'
 import os
+import sys
 from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer
 
@@ -109,6 +110,7 @@ kompress_onnx_files = [
     'onnx/kompress-int8.onnx',
 ]
 
+onnx_success = False
 for onnx_file in kompress_onnx_files:
     try:
         hf_hub_download(
@@ -118,22 +120,35 @@ for onnx_file in kompress_onnx_files:
             resume_download=True,
             force_download=False,
         )
-        print(f'Downloaded {kompress_model}/{onnx_file}')
+        print(f'✓ Downloaded {kompress_model}/{onnx_file}')
+        onnx_success = True
+        break  # Use first successfully downloaded artifact
     except Exception as e:
-        print(f'Note: Could not download {onnx_file}: {e}')
+        print(f'⚠ Could not download {onnx_file}: {e}')
+
+if not onnx_success:
+    print('✗ FAILED: Could not download any Kompress ONNX artifact', file=sys.stderr)
+    sys.exit(1)
 
 # Download tokenizer from ModernBERT-base (Kompress reuses this exact tokenizer)
 tokenizer_model = 'answerdotai/ModernBERT-base'
+tokenizer_success = False
 try:
     AutoTokenizer.from_pretrained(
         tokenizer_model,
         trust_remote_code=True,
     )
-    print(f'Downloaded tokenizer from {tokenizer_model}')
+    print(f'✓ Downloaded tokenizer from {tokenizer_model}')
+    tokenizer_success = True
 except Exception as e:
-    print(f'Warning: Could not download tokenizer: {e}')
+    print(f'✗ FAILED: Could not download tokenizer from {tokenizer_model}: {e}', file=sys.stderr)
+    sys.exit(1)
 
-print('Hugging Face model cache populated')
+if onnx_success and tokenizer_success:
+    print('✓ Hugging Face model cache successfully populated')
+else:
+    print('✗ FAILED: Model cache is incomplete', file=sys.stderr)
+    sys.exit(1)
 HFCACHE
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
