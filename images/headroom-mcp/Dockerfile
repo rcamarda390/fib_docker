@@ -62,6 +62,9 @@ COPY --from=source /src/headroom/ headroom/
 # The pinned upstream release can contain a lockfile that uv considers stale
 # when evaluated against the release metadata. Use the checked-in resolution
 # without attempting to rewrite it during the image build.
+# The proxy extra includes Headroom's MCP server, compression, and general
+# LiteLLM backends. The bedrock extra adds boto3 and botocore for AWS SDK
+# support required to reach AWS Bedrock from an air-gapped GovCloud environment.
 RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 # There is deliberately no pip step here. `uv sync` builds /opt/venv without
 # seeding pip or setuptools, so any `pip`, `/opt/venv/bin/pip`, or
@@ -81,6 +84,73 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import boto3, botocore; \
      print(f'Bedrock dependencies OK: boto3 {boto3.__version__}, botocore {botocore.__version__}')"
 
+# Pre-cache Hugging Face models needed for Kompress compression in the air-gapped runtime.
+# When HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 are set at runtime, these models
+# must already be present in the image cache. Kompress uses:
+#   - chopratejas/kompress-v2-base: ONNX model for text importance scoring
+#   - answerdotai/ModernBERT-base: Tokenizer (shared with Kompress model)
+# Only the required ONNX artifacts and tokenizer are downloaded, not full weights.
+ENV HF_HOME=/opt/headroom-cache/huggingface
+RUN mkdir -p /opt/headroom-cache/huggingface && \
+    PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE'
+import os
+import sys
+from huggingface_hub import hf_hub_download
+from transformers import AutoTokenizer
+
+hf_home = '/opt/headroom-cache/huggingface'
+os.environ['HF_HOME'] = hf_home
+
+# Download Kompress model artifacts: prefer int8-wo (weight-only quantized),
+# fallback to fp32 and older int8 for compatibility
+kompress_model = 'chopratejas/kompress-v2-base'
+kompress_onnx_files = [
+    'onnx/kompress-int8-wo.onnx',
+    'onnx/kompress-fp32.onnx',
+    'onnx/kompress-int8.onnx',
+]
+
+onnx_success = False
+for onnx_file in kompress_onnx_files:
+    try:
+        hf_hub_download(
+            repo_id=kompress_model,
+            filename=onnx_file,
+            repo_type='model',
+            resume_download=True,
+            force_download=False,
+        )
+        print(f'✓ Downloaded {kompress_model}/{onnx_file}')
+        onnx_success = True
+        break  # Use first successfully downloaded artifact
+    except Exception as e:
+        print(f'⚠ Could not download {onnx_file}: {e}')
+
+if not onnx_success:
+    print('✗ FAILED: Could not download any Kompress ONNX artifact', file=sys.stderr)
+    sys.exit(1)
+
+# Download tokenizer from ModernBERT-base (Kompress reuses this exact tokenizer)
+tokenizer_model = 'answerdotai/ModernBERT-base'
+tokenizer_success = False
+try:
+    AutoTokenizer.from_pretrained(
+        tokenizer_model,
+        trust_remote_code=True,
+    )
+    print(f'✓ Downloaded tokenizer from {tokenizer_model}')
+    tokenizer_success = True
+except Exception as e:
+    print(f'✗ FAILED: Could not download tokenizer from {tokenizer_model}: {e}', file=sys.stderr)
+    sys.exit(1)
+
+if onnx_success and tokenizer_success:
+    print('✓ Hugging Face model cache successfully populated')
+else:
+    print('✗ FAILED: Model cache is incomplete', file=sys.stderr)
+    sys.exit(1)
+HFCACHE
+
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
@@ -89,7 +159,13 @@ ARG PYTHON_VERSION
 ENV HEADROOM_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH=/opt/venv/bin:${PATH}
+    PATH=/opt/venv/bin:${PATH} \
+    HF_HOME=/opt/headroom-cache/huggingface \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    LITELLM_LOCAL_MODEL_COST_MAP=True \
+    HEADROOM_UPDATE_CHECK=off
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -204,9 +280,11 @@ RUN mkdir -p /usr/share/debconf \
       libpam-runtime libpam-modules libpam0g libtasn1-6 \
  && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/headroom-cache /opt/headroom-cache
 COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
-RUN chmod +x /usr/local/bin/headroom-entrypoint
+RUN chmod +x /usr/local/bin/headroom-entrypoint \
+    && chown -R headroom:headroom /opt/headroom-cache
 # Verify that purged packages didn't break critical runtime functionality.
 # `python -c "import sys"` proved nothing: it passed while libsqlite3-0 was
 # purged, so a green build shipped an image that died on startup. Import every
@@ -218,6 +296,9 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      sqlite3.connect(':memory:').execute('select 1').fetchone(); \
      ssl.create_default_context(); \
      print('Verification: Python stdlib (sqlite3, ssl, compression) OK')" \
+ && PATH="/opt/venv/bin:${PATH}" python -c \
+    "import boto3, botocore, awscrt; \
+     print('Verification: AWS dependencies (boto3, botocore, awscrt) OK')" \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && ! command -v perl \
  && ! command -v gzip \
