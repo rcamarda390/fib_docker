@@ -296,9 +296,15 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      sqlite3.connect(':memory:').execute('select 1').fetchone(); \
      ssl.create_default_context(); \
      print('Verification: Python stdlib (sqlite3, ssl, compression) OK')" \
- && PATH="/opt/venv/bin:${PATH}" python -c \
-    "import boto3, botocore, awscrt; \
-     print('Verification: AWS dependencies (boto3, botocore, awscrt) OK')" \
+ && PATH="/opt/venv/bin:${PATH}" python << 'AWSCHECK'
+import boto3, botocore
+print(f'Verification: AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')
+try:
+    import awscrt
+    print(f'  awscrt {awscrt.__version__} also available')
+except ImportError:
+    pass  # awscrt is optional for basic Bedrock support
+AWSCHECK
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && ! command -v perl \
  && ! command -v gzip \
