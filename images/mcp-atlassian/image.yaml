@@ -1,0 +1,8 @@
+name: mcp-atlassian
+upstream_version: latest
+revision: 1
+build_args: {}
+publish:
+  ghcr: true
+  dockerhub: true
+  latest: false
