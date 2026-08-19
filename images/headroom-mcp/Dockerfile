@@ -93,7 +93,7 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 # Timeout/retry handling: HF downloads can timeout; skip this step if network fails.
 ENV HF_HOME=/opt/headroom-cache/huggingface
 RUN mkdir -p /opt/headroom-cache/huggingface || true
-RUN PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE' || echo "Warning: HF model cache population failed, will use online models"
+RUN PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE'
 import os
 import sys
 from huggingface_hub import hf_hub_download
