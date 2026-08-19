@@ -106,12 +106,11 @@ try:
     compress_url = "http://localhost:8787/v1/compress"
 
     # The first request builds tokenizers and loads the Kompress ONNX model out
-    # of the baked-in cache, which is far slower than steady-state. The workflow
-    # caps the whole run via `smoke_timeout` (600s), so this is the inner bound
-    # and is deliberately set just under it: the request must time out before
-    # the outer `timeout` kills the container, otherwise the except path never
-    # runs and dump_proxy_logs() never gets to explain the failure.
-    def compress(body, timeout=540):
+    # of the baked-in cache. Measured at ~5s on run 32311533470, so 90s is ample.
+    # It must stay below the workflow's `smoke_timeout` (120s): the request has
+    # to time out before the outer `timeout` kills the container, otherwise the
+    # except path never runs and dump_proxy_logs() never gets to explain why.
+    def compress(body, timeout=90):
         """POST to /v1/compress and return the decoded JSON response."""
         request = urllib.request.Request(
             compress_url,
