@@ -1,4 +1,4 @@
-name: mcp-atlassian
+name: sooperset-mcp-atlassian
 upstream_version: latest
 revision: 1
 build_args: {}
