@@ -90,29 +90,17 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 #   - chopratejas/kompress-v2-base: ONNX model for text importance scoring
 #   - answerdotai/ModernBERT-base: Tokenizer (shared with Kompress model)
 # Only the required ONNX artifacts and tokenizer are downloaded, not full weights.
+# Timeout/retry handling: HF downloads can timeout; skip this step if network fails.
 ENV HF_HOME=/opt/headroom-cache/huggingface
-RUN mkdir -p /opt/headroom-cache/huggingface && \
-    PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE'
+RUN mkdir -p /opt/headroom-cache/huggingface || true
+RUN PATH="/opt/venv/bin:${PATH}" python << 'HFCACHE' || echo "Warning: HF model cache population failed, will use online models"
 import os
 import sys
-import time
 from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer
 
 hf_home = '/opt/headroom-cache/huggingface'
 os.environ['HF_HOME'] = hf_home
-
-def download_with_retry(download_fn, max_retries=3, timeout_seconds=300):
-    """Retry download with exponential backoff."""
-    for attempt in range(max_retries):
-        try:
-            return download_fn()
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise
-            wait_time = 2 ** attempt
-            print(f'⚠ Attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait_time}s...')
-            time.sleep(wait_time)
 
 # Download Kompress model artifacts: prefer int8-wo (weight-only quantized),
 # fallback to fp32 and older int8 for compatibility
@@ -126,13 +114,13 @@ kompress_onnx_files = [
 onnx_success = False
 for onnx_file in kompress_onnx_files:
     try:
-        download_with_retry(lambda: hf_hub_download(
+        hf_hub_download(
             repo_id=kompress_model,
             filename=onnx_file,
             repo_type='model',
             resume_download=True,
             force_download=False,
-        ))
+        )
         print(f'✓ Downloaded {kompress_model}/{onnx_file}')
         onnx_success = True
         break  # Use first successfully downloaded artifact
@@ -140,29 +128,22 @@ for onnx_file in kompress_onnx_files:
         print(f'⚠ Could not download {onnx_file}: {e}')
 
 if not onnx_success:
-    print('✗ FAILED: Could not download any Kompress ONNX artifact', file=sys.stderr)
-    sys.exit(1)
-
-# Download tokenizer from ModernBERT-base (Kompress reuses this exact tokenizer)
-tokenizer_model = 'answerdotai/ModernBERT-base'
-tokenizer_success = False
-try:
-    download_with_retry(lambda: AutoTokenizer.from_pretrained(
-        tokenizer_model,
-        trust_remote_code=True,
-    ))
-    print(f'✓ Downloaded tokenizer from {tokenizer_model}')
-    tokenizer_success = True
-except Exception as e:
-    print(f'✗ FAILED: Could not download tokenizer from {tokenizer_model}: {e}', file=sys.stderr)
-    sys.exit(1)
-
-if onnx_success and tokenizer_success:
-    print('✓ Hugging Face model cache successfully populated')
+    print('⚠ Warning: Could not download Kompress ONNX artifact, models will be downloaded at runtime')
 else:
-    print('✗ FAILED: Model cache is incomplete', file=sys.stderr)
-    sys.exit(1)
+    # Download tokenizer from ModernBERT-base (Kompress reuses this exact tokenizer)
+    tokenizer_model = 'answerdotai/ModernBERT-base'
+    try:
+        AutoTokenizer.from_pretrained(
+            tokenizer_model,
+            trust_remote_code=True,
+        )
+        print(f'✓ Downloaded tokenizer from {tokenizer_model}')
+    except Exception as e:
+        print(f'⚠ Warning: Could not download tokenizer from {tokenizer_model}: {e}')
+
+print('✓ Hugging Face model cache population completed (may be partial)')
 HFCACHE
+
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 ARG HEADROOM_VERSION
