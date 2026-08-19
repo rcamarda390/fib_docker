@@ -34,6 +34,15 @@ on:
         required: false
         default: ""
         type: string
+      # Wall-clock budget for the whole `docker run` smoke invocation. Images
+      # whose smoke test only starts a process and exits are fine on the 15s
+      # default; images that boot a server and exercise it (headroom-mcp loads
+      # an ONNX model on the first compression request) need a larger budget.
+      # This is a ceiling, not a wait -- raising it cannot slow a fast image.
+      smoke_timeout:
+        required: false
+        default: 15
+        type: number
       run_smoke_test:
         required: false
         default: true
@@ -218,10 +227,11 @@ jobs:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
           SMOKE_COMMAND: ${{ inputs.smoke_command }}
+          SMOKE_TIMEOUT: ${{ inputs.smoke_timeout }}
         run: |
           set -euo pipefail
           IFS=',' read -r -a SMOKE_ARGS <<< "$SMOKE_COMMAND"
-          timeout 15 docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
+          timeout "$SMOKE_TIMEOUT" docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Run health smoke test
         if: inputs.smoke_healthcheck
