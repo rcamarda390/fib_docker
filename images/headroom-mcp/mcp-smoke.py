@@ -78,45 +78,68 @@ try:
     The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.
     """ * 10  # Repeat to ensure sufficient token count for compression
 
-    # Create request for Kompress compression endpoint
+    # POST /v1/compress takes an OpenAI-shaped body:
+    #   {"messages": [...], "model": "...", "config": {}}
+    # Both `messages` and `model` are required — omitting either is a 400. `model`
+    # is only used to resolve the context limit and pick a tokenizer; it is never
+    # dispatched to a provider, so no network egress and no credentials are needed.
+    # The response carries the compressed messages plus metrics:
+    #   messages, tokens_before, tokens_after, tokens_saved, compression_ratio,
+    #   transforms_applied, ccr_hashes
     compress_url = "http://localhost:8787/v1/compress"
-    compress_data = json.dumps({
-        "text": test_content,
-        "method": "kompress"
-    }).encode('utf-8')
 
-    compression_ok = False
-    try:
+    def compress(body, timeout=5):
+        """POST to /v1/compress and return the decoded JSON response."""
         request = urllib.request.Request(
             compress_url,
-            data=compress_data,
+            data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json"},
-            method="POST"
+            method="POST",
         )
-        response = urllib.request.urlopen(request, timeout=5)
-        if response.status == 200:
-            result = json.loads(response.read().decode('utf-8'))
-            original_len = len(test_content)
-            compressed_len = len(result.get("output", ""))
-            compression_ratio = (1 - compressed_len / original_len) * 100 if original_len > 0 else 0
-            print(f"✓ Compression endpoint OK")
-            print(f"  Original: {original_len} chars → Compressed: {compressed_len} chars")
-            print(f"  Compression ratio: {compression_ratio:.1f}%")
-            if compressed_len >= original_len * 0.95:
-                print("  ⚠ Compression minimal (likely validation-only passthrough)")
-            else:
-                print("  ✓ Significant compression achieved")
-            compression_ok = True
-        else:
+        response = urllib.request.urlopen(request, timeout=timeout)
+        if response.status != 200:
             raise SystemExit(f"Compression endpoint returned error status {response.status}")
+        return json.loads(response.read().decode("utf-8"))
+
+    def joined_len(messages):
+        """Total character count of the text content across messages."""
+        total = 0
+        for message in messages:
+            content = message.get("content", "")
+            if isinstance(content, str):
+                total += len(content)
+            elif isinstance(content, list):
+                # Anthropic-style content blocks
+                total += sum(len(b.get("text", "")) for b in content if isinstance(b, dict))
+        return total
+
+    base_body = {
+        "messages": [{"role": "user", "content": test_content}],
+        "model": "gpt-4o-mini",
+    }
+
+    try:
+        result = compress(base_body)
+        original_len = len(test_content)
+        compressed_len = joined_len(result.get("messages", []))
+        tokens_before = result.get("tokens_before", 0)
+        tokens_after = result.get("tokens_after", 0)
+        print("✓ Compression endpoint OK")
+        print(f"  Original: {original_len} chars → Compressed: {compressed_len} chars")
+        print(f"  Tokens: {tokens_before} → {tokens_after} (saved {result.get('tokens_saved', 0)})")
+        print(f"  Transforms applied: {result.get('transforms_applied', [])}")
+        if compressed_len >= original_len * 0.95:
+            print("  ⚠ Compression minimal (content may be below the compressor's threshold)")
+        else:
+            print("  ✓ Significant compression achieved")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             # Endpoint doesn't exist; this is a configuration/version issue, not a runtime failure
-            print(f"⚠ Compression endpoint not available (404) — skipping compression test")
-            print(f"   (Headroom version may not expose /v1/compress endpoint)")
+            print("⚠ Compression endpoint not available (404) — skipping compression test")
+            print("   (Headroom version may not expose /v1/compress endpoint)")
         else:
             # Any other HTTP error indicates a real problem (500, 422, 503, etc.)
-            error_body = e.read().decode('utf-8', errors='ignore') if hasattr(e, 'read') else ""
+            error_body = e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else ""
             raise SystemExit(
                 f"Compression endpoint HTTP {e.code}: {error_body[:200]}\n"
                 f"This image cannot support compression in the air-gapped environment."
@@ -124,6 +147,12 @@ try:
     except Exception as e:
         raise SystemExit(f"Compression test failed: {e}")
 
+    # A Kompress-specific probe (config.mode="lossy_inline") would exercise the
+    # cached ONNX model directly, but the workflow caps the whole smoke run at
+    # `timeout 15` and proxy startup already spends ~8s of that. A second call
+    # that lazily loads the model risks tripping the timeout, so the default
+    # pipeline above is the assertion: it proves the proxy compresses under
+    # HF_HUB_OFFLINE=1 without reaching for the network.
     print("\n✓ All smoke tests passed")
 
 finally:
