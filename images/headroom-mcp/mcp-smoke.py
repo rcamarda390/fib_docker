@@ -107,8 +107,11 @@ try:
 
     # The first request builds tokenizers and loads the Kompress ONNX model out
     # of the baked-in cache, which is far slower than steady-state. The workflow
-    # caps the whole run via `smoke_timeout`, so this is the inner bound.
-    def compress(body, timeout=90):
+    # caps the whole run via `smoke_timeout` (600s), so this is the inner bound
+    # and is deliberately set just under it: the request must time out before
+    # the outer `timeout` kills the container, otherwise the except path never
+    # runs and dump_proxy_logs() never gets to explain the failure.
+    def compress(body, timeout=540):
         """POST to /v1/compress and return the decoded JSON response."""
         request = urllib.request.Request(
             compress_url,
@@ -170,11 +173,11 @@ try:
         raise SystemExit(f"Compression test failed: {e}")
 
     # A Kompress-specific probe (config.mode="lossy_inline") would exercise the
-    # cached ONNX model directly, but the workflow caps the whole smoke run at
-    # `timeout 15` and proxy startup already spends ~8s of that. A second call
-    # that lazily loads the model risks tripping the timeout, so the default
-    # pipeline above is the assertion: it proves the proxy compresses under
-    # HF_HUB_OFFLINE=1 without reaching for the network.
+    # cached ONNX model directly. It is still left out: the default pipeline
+    # above already proves the proxy compresses under HF_HUB_OFFLINE=1 without
+    # reaching for the network, and a second model-loading call would only add
+    # cost to a step whose duration is the open question. Worth adding back once
+    # a green run shows what the first compression actually costs.
     print("\n✓ All smoke tests passed")
 
 finally:

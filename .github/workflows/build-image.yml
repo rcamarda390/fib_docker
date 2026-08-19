@@ -97,10 +97,68 @@ on:
 permissions:
   contents: write
   packages: write
+  # Needed by the final step, which proposes the revision bump as a PR rather
+  # than pushing it to a protected branch. Callers must grant this too: for a
+  # reusable workflow the effective token scope comes from the calling job.
+  pull-requests: write
 
 jobs:
+  # A merged revision-bump PR changes only the `revision:` line of the image
+  # config -- which still matches the caller's `paths:` trigger, so it starts
+  # another build, which publishes another tag and proposes another bump. With
+  # auto-merge on those PRs that loop never terminates.
+  #
+  # `[skip ci]` on the branch commit does not survive the merge: a squash or
+  # merge commit is built from the PR title, not from the branch commit subject.
+  # The generated title carries the marker too, but that only covers
+  # squash-with-title, so this guard is the load-bearing one -- it inspects the
+  # diff, and so holds for every merge strategy regardless of commit message.
+  guard:
+    name: Check whether this push is only a revision bump
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      revision_only: ${{ steps.check.outputs.revision_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # Skipped for workflow_dispatch, which leaves the output empty so the
+      # build runs: a manual dispatch is always an explicit request to build.
+      - name: Detect a revision-only change
+        id: check
+        if: github.event_name == 'push'
+        env:
+          CONFIG: ${{ inputs.config }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Diffing HEAD^..HEAD reads the merged change for a merge commit and
+          # the squashed change for a squash commit. The bump PR always lands as
+          # exactly one commit, so this window is precisely the case guarded.
+          changed=$(git diff --name-only HEAD^ HEAD)
+          if [ "$changed" != "$CONFIG" ]; then
+            echo "Files beyond ${CONFIG} changed; this is a real build."
+            exit 0
+          fi
+          # `-U0` so only changed lines appear; the `^[+-][^+-]` filter drops the
+          # `---`/`+++` file headers. If any changed line is not the revision
+          # line, something real changed and the build must run.
+          if git diff -U0 HEAD^ HEAD -- "$CONFIG" \
+            | grep -E '^[+-][^+-]' \
+            | grep -qvE '^[+-]revision:[[:space:]]*[0-9]+[[:space:]]*$'; then
+            echo "${CONFIG} changed beyond the revision line; this is a real build."
+            exit 0
+          fi
+          echo "revision_only=true" >> "$GITHUB_OUTPUT"
+          echo "Only the revision line changed; skipping to avoid a bump loop."
+
   build:
     name: Build, smoke-test, and publish the configured MCP image
+    needs: guard
+    if: needs.guard.outputs.revision_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -113,45 +171,33 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Increment published image revision
+      # The revision bump is split in two. This step only rewrites the file in
+      # the workspace, so "Read image metadata" below tags the image with the
+      # new revision. Committing it is deferred to the end of the job so that a
+      # build which fails to publish never proposes a bump for an image nobody
+      # can pull. Nothing here touches the network, so it cannot fail the build
+      # the way the old direct push to a protected branch did.
+      - name: Compute the next image revision
+        id: revision
         if: inputs.auto_increment_revision && inputs.publish && (inputs.publish_ghcr || inputs.publish_dockerhub) && github.event_name != 'pull_request'
         env:
           CONFIG: ${{ inputs.config }}
-          BRANCH: ${{ github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for attempt in 1 2 3; do
-            revision_count=$(grep -Ec '^revision:[[:space:]]*[0-9]+[[:space:]]*$' "$CONFIG")
-            test "$revision_count" -eq 1
-            current_revision=$(sed -nE 's/^revision:[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' "$CONFIG")
-            current_version=$(sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' "$CONFIG")
-            previous_version=$(git show "HEAD^:$CONFIG" 2>/dev/null | sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' || true)
-            if test -n "$previous_version" && test "$previous_version" != "$current_version"; then
-              next_revision=1
-            else
-              next_revision=$((current_revision + 1))
-            fi
-            sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
-            if git diff --quiet -- "$CONFIG"; then
-              echo "Revision changed concurrently; refreshing the branch before retrying" >&2
-              git fetch origin "$BRANCH"
-              git reset --hard "origin/$BRANCH"
-              continue
-            fi
-            git add "$CONFIG"
-            git commit -m "chore: increment MCP image revision [skip ci]" \
-              -m "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
-            if git push origin "HEAD:$BRANCH"; then
-              exit 0
-            fi
-            git fetch origin "$BRANCH"
-            git reset --hard "origin/$BRANCH"
-          done
-          echo "Unable to publish the revision update after retries" >&2
-          exit 1
+          revision_count=$(grep -Ec '^revision:[[:space:]]*[0-9]+[[:space:]]*$' "$CONFIG")
+          test "$revision_count" -eq 1
+          current_revision=$(sed -nE 's/^revision:[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' "$CONFIG")
+          current_version=$(sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' "$CONFIG")
+          previous_version=$(git show "HEAD^:$CONFIG" 2>/dev/null | sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' || true)
+          if test -n "$previous_version" && test "$previous_version" != "$current_version"; then
+            next_revision=1
+          else
+            next_revision=$((current_revision + 1))
+          fi
+          sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
+          echo "next_revision=$next_revision" >> "$GITHUB_OUTPUT"
+          echo "Building revision $next_revision (previous published revision: $current_revision)"
 
       - name: Read image metadata
         id: meta
@@ -369,3 +415,82 @@ jobs:
             echo "Pushed to Docker Hub: $DOCKERHUB_IMAGE"
             echo "Pull from Docker Hub: docker pull $DOCKERHUB_IMAGE"
           fi
+
+      # `main` requires changes to go through a pull request, so the bump cannot
+      # be pushed to it directly: the previous `git push origin HEAD:main` was
+      # rejected by the ruleset and failed the whole build at step 3, before it
+      # ever built, smoke-tested or scanned. The bump is therefore proposed as
+      # its own PR. It runs last and only on success, so a bump is never
+      # proposed for an image that failed to publish.
+      #
+      # The head branch is stable per image and force-pushed, so repeated builds
+      # refresh a single open PR instead of piling up one per run. It is written
+      # only by this step, and carries a single deterministic line change, so the
+      # force-push can only ever replace a superseded bump with the current one.
+      #
+      # Known caveat: the counter advances only when that PR merges. A build
+      # that starts while the bump is still open recomputes the same revision
+      # from the base branch and republishes the same tag. Merging the bump PR
+      # promptly -- or enabling auto-merge on it -- keeps the counter honest.
+      - name: Open a PR with the incremented revision
+        if: ${{ success() && steps.revision.outcome == 'success' }}
+        env:
+          CONFIG: ${{ inputs.config }}
+          BASE: ${{ github.ref_name }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          NEXT_REVISION: ${{ steps.revision.outputs.next_revision }}
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "$CONFIG"; then
+            echo "Revision file is unchanged; nothing to propose."
+            exit 0
+          fi
+
+          head_branch="ci/increment-revision-${IMAGE_NAME}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$head_branch"
+          git add "$CONFIG"
+          git commit \
+            -m "chore: increment ${IMAGE_NAME} image revision to ${NEXT_REVISION} [skip ci]" \
+            -m "Published as ${IMAGE_TAG}." \
+            -m "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
+          git push --force origin "$head_branch"
+
+          # Checked explicitly rather than tolerating a failed `gh pr create`:
+          # swallowing the error would also swallow a 403 from the "Allow GitHub
+          # Actions to create and approve pull requests" setting being off, and
+          # the revision would then silently never advance.
+          existing=$(gh pr list --repo "$REPO" --head "$head_branch" --base "$BASE" \
+            --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Refreshed existing revision PR #${existing}"
+            echo "Revision bump updated on PR #${existing}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            printf '## Automated image revision bump\n\n'
+            printf 'This build published `%s`, so `%s` is bumped to `revision: %s`\n' "$IMAGE_TAG" "$CONFIG" "$NEXT_REVISION"
+            printf 'to stop the next build reusing that tag.\n\n'
+            printf -- '- Image: `%s`\n' "$IMAGE_NAME"
+            printf -- '- Published tag: `%s`\n' "$IMAGE_TAG"
+            printf -- '- Config: `%s`\n\n' "$CONFIG"
+            printf '`%s` requires changes to go through a pull request, so CI proposes the\n' "$BASE"
+            printf 'bump here instead of pushing it directly.\n\n'
+            printf '> **Merge this promptly.** Until it lands, the next build recomputes the\n'
+            printf '> same revision from `%s` and republishes the same tag.\n' "$BASE"
+          } > /tmp/revision_pr_body.md
+
+          pr_url=$(gh pr create \
+            --repo "$REPO" \
+            --base "$BASE" \
+            --head "$head_branch" \
+            --title "chore: increment ${IMAGE_NAME} image revision to ${NEXT_REVISION} [skip ci]" \
+            --body-file /tmp/revision_pr_body.md)
+          echo "Opened revision PR: ${pr_url}"
+          echo "Revision bump proposed: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"

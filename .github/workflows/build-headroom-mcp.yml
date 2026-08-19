@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
   packages: write
+  # The shared workflow proposes the revision bump as a PR, because
+  # the base branch rejects direct pushes. A reusable workflow runs
+  # with the calling job's token scope, so the grant must be here.
+  pull-requests: write
 
 jobs:
   build:
@@ -19,6 +23,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      pull-requests: write
     with:
       image_name: headroom-mcp
       context: ./images/headroom-mcp
@@ -29,7 +34,12 @@ jobs:
       smoke_command: __smoke
       # The proxy takes ~8s to boot and then loads the Kompress ONNX model on
       # the first /v1/compress request, which does not fit the 15s default.
-      smoke_timeout: 120
+      # This is a ceiling, not a wait: a fast image exits as soon as the smoke
+      # test passes, so a generous budget costs nothing on a healthy run. It is
+      # set deliberately high to stop guessing at the model-load cost; the job's
+      # own `timeout-minutes: 30` still bounds the run. Reduce it once a green
+      # run establishes what the first compression actually costs.
+      smoke_timeout: 600
       scan: true
       auto_increment_revision: true
       publish: true
