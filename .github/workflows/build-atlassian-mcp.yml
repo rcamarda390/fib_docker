@@ -6,6 +6,10 @@ on:
 permissions:
   contents: write
   packages: write
+  # The shared workflow proposes the revision bump as a PR, because
+  # the base branch rejects direct pushes. A reusable workflow runs
+  # with the calling job's token scope, so the grant must be here.
+  pull-requests: write
 
 jobs:
   build:
@@ -15,6 +19,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      pull-requests: write
     with:
       image_name: atlassian-mcp
       context: ./images/atlassian-mcp
