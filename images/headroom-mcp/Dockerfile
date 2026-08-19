@@ -80,6 +80,9 @@ RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
 RUN test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("headroom-ai"))')" = "$HEADROOM_VERSION"
+RUN PATH="/opt/venv/bin:${PATH}" python -c \
+    "import boto3, botocore; \
+     print(f'Bedrock dependencies OK: boto3 {boto3.__version__}, botocore {botocore.__version__}')"
 
 # Pre-cache Hugging Face models needed for Kompress compression in the air-gapped runtime.
 # When HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 are set at runtime, these models
