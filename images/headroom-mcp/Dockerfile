@@ -94,7 +94,8 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 ENV HF_HOME=/opt/headroom-cache/huggingface
 RUN mkdir -p /opt/headroom-cache/huggingface || true
 RUN <<EOF
-set -euo pipefail
+#!/bin/sh
+set -eu
 export PATH="/opt/venv/bin:${PATH}"
 python << 'HFCACHE'
 import os
@@ -294,15 +295,11 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      sqlite3.connect(':memory:').execute('select 1').fetchone(); \
      ssl.create_default_context(); \
      print('Verification: Python stdlib (sqlite3, ssl, compression) OK')" \
- && PATH="/opt/venv/bin:${PATH}" python << 'AWSCHECK'
-import boto3, botocore
-print(f'Verification: AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')
-try:
-    import awscrt
-    print(f'  awscrt {awscrt.__version__} also available')
-except ImportError:
-    pass  # awscrt is optional for basic Bedrock support
-AWSCHECK
+ && PATH="/opt/venv/bin:${PATH}" python -c \
+    "import boto3, botocore; \
+     print(f'Verification: AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
+ && { PATH="/opt/venv/bin:${PATH}" python -c \
+    "import awscrt; print(f'  awscrt {awscrt.__version__} also available')" || true; } \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && ! command -v perl \
  && ! command -v gzip \
