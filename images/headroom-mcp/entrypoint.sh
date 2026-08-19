@@ -8,4 +8,4 @@ if [ "${1:-}" = "__smoke" ]; then
     exec /opt/venv/bin/python /usr/local/bin/mcp-smoke.py
 fi
 
-exec /opt/venv/bin/headroom mcp serve "$@"
+exec /opt/venv/bin/headroom proxy --host 0.0.0.0 --port 8787 "$@"
