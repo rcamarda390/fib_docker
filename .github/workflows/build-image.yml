@@ -103,8 +103,62 @@ permissions:
   pull-requests: write
 
 jobs:
+  # A merged revision-bump PR changes only the `revision:` line of the image
+  # config -- which still matches the caller's `paths:` trigger, so it starts
+  # another build, which publishes another tag and proposes another bump. With
+  # auto-merge on those PRs that loop never terminates.
+  #
+  # `[skip ci]` on the branch commit does not survive the merge: a squash or
+  # merge commit is built from the PR title, not from the branch commit subject.
+  # The generated title carries the marker too, but that only covers
+  # squash-with-title, so this guard is the load-bearing one -- it inspects the
+  # diff, and so holds for every merge strategy regardless of commit message.
+  guard:
+    name: Check whether this push is only a revision bump
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      revision_only: ${{ steps.check.outputs.revision_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # Skipped for workflow_dispatch, which leaves the output empty so the
+      # build runs: a manual dispatch is always an explicit request to build.
+      - name: Detect a revision-only change
+        id: check
+        if: github.event_name == 'push'
+        env:
+          CONFIG: ${{ inputs.config }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Diffing HEAD^..HEAD reads the merged change for a merge commit and
+          # the squashed change for a squash commit. The bump PR always lands as
+          # exactly one commit, so this window is precisely the case guarded.
+          changed=$(git diff --name-only HEAD^ HEAD)
+          if [ "$changed" != "$CONFIG" ]; then
+            echo "Files beyond ${CONFIG} changed; this is a real build."
+            exit 0
+          fi
+          # `-U0` so only changed lines appear; the `^[+-][^+-]` filter drops the
+          # `---`/`+++` file headers. If any changed line is not the revision
+          # line, something real changed and the build must run.
+          if git diff -U0 HEAD^ HEAD -- "$CONFIG" \
+            | grep -E '^[+-][^+-]' \
+            | grep -qvE '^[+-]revision:[[:space:]]*[0-9]+[[:space:]]*$'; then
+            echo "${CONFIG} changed beyond the revision line; this is a real build."
+            exit 0
+          fi
+          echo "revision_only=true" >> "$GITHUB_OUTPUT"
+          echo "Only the revision line changed; skipping to avoid a bump loop."
+
   build:
     name: Build, smoke-test, and publish the configured MCP image
+    needs: guard
+    if: needs.guard.outputs.revision_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -436,7 +490,7 @@ jobs:
             --repo "$REPO" \
             --base "$BASE" \
             --head "$head_branch" \
-            --title "chore: increment ${IMAGE_NAME} image revision to ${NEXT_REVISION}" \
+            --title "chore: increment ${IMAGE_NAME} image revision to ${NEXT_REVISION} [skip ci]" \
             --body-file /tmp/revision_pr_body.md)
           echo "Opened revision PR: ${pr_url}"
           echo "Revision bump proposed: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
