@@ -62,7 +62,7 @@ COPY --from=source /src/headroom/ headroom/
 # The pinned upstream release can contain a lockfile that uv considers stale
 # when evaluated against the release metadata. Use the checked-in resolution
 # without attempting to rewrite it during the image build.
-RUN uv sync --frozen --extra mcp --no-dev --no-editable
+RUN uv sync --frozen --extra proxy --no-dev --no-editable
 # There is deliberately no pip step here. `uv sync` builds /opt/venv without
 # seeding pip or setuptools, so any `pip`, `/opt/venv/bin/pip`, or
 # `python -m pip` invocation against this venv fails with "No module named
