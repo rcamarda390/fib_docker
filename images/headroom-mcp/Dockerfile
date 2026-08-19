@@ -62,7 +62,7 @@ COPY --from=source /src/headroom/ headroom/
 # The pinned upstream release can contain a lockfile that uv considers stale
 # when evaluated against the release metadata. Use the checked-in resolution
 # without attempting to rewrite it during the image build.
-RUN uv sync --frozen --extra proxy --no-dev --no-editable
+RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 # There is deliberately no pip step here. `uv sync` builds /opt/venv without
 # seeding pip or setuptools, so any `pip`, `/opt/venv/bin/pip`, or
 # `python -m pip` invocation against this venv fails with "No module named
@@ -77,6 +77,9 @@ RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
 RUN test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("headroom-ai"))')" = "$HEADROOM_VERSION"
+RUN PATH="/opt/venv/bin:${PATH}" python -c \
+    "import boto3, botocore; \
+     print(f'Bedrock dependencies OK: boto3 {boto3.__version__}, botocore {botocore.__version__}')"
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 ARG HEADROOM_VERSION
