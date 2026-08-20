@@ -3,7 +3,7 @@
 # Short-lived downstream carry for Headroom 0.35.0 until the fixes are upstream.
 # Build from the last verified fib_docker Headroom image so all air-gap assets,
 # AWS SDK dependencies, hardening, and compression model cache are preserved.
-ARG HEADROOM_BASE_IMAGE=ghcr.io/rcamarda390/headroom-mcp:0.35.0-v35
+ARG HEADROOM_BASE_IMAGE=ghcr.io/rcamarda390/headroom-mcp:0.35.0-v36
 FROM ${HEADROOM_BASE_IMAGE}
 
 USER root
