@@ -25,6 +25,12 @@ RUN set -eu; \
 # does not alter TLS verification for real Bedrock or other outbound requests.
 ENV HEADROOM_SKIP_UPSTREAM_CHECK=1
 
+# Enable Headroom 0.35.0 output-token shaping. This is a live per-request knob
+# supported by the proxy and enables dashboard measurement of output savings.
+# A learned verbosity profile can be applied later with
+# `headroom learn --verbosity --apply` when supported session history is mounted.
+ENV HEADROOM_OUTPUT_SHAPER=1
+
 USER headroom
 WORKDIR /home/headroom
 
