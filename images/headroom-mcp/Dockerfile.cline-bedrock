@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+
+# Short-lived downstream carry for Headroom 0.35.0 until the fixes are upstream.
+# Build from the last verified fib_docker Headroom image so all air-gap assets,
+# AWS SDK dependencies, hardening, and compression model cache are preserved.
+ARG HEADROOM_BASE_IMAGE=ghcr.io/rcamarda390/headroom-mcp:0.35.0-v36
+FROM ${HEADROOM_BASE_IMAGE}
+
+USER root
+
+COPY patch-headroom-bedrock-openai.py /tmp/patch-headroom-bedrock-openai.py
+COPY bedrock-openai-regression.py /tmp/bedrock-openai-regression.py
+
+RUN set -eu; \
+    target="$(python -c 'import headroom.backends.litellm as m; print(m.__file__)')"; \
+    python /tmp/patch-headroom-bedrock-openai.py "$target"; \
+    python -m py_compile "$target"; \
+    python /tmp/bedrock-openai-regression.py; \
+    rm -f /tmp/patch-headroom-bedrock-openai.py /tmp/bedrock-openai-regression.py
+
+# Headroom 0.35.0's readiness probe targets the Anthropic HTTP upstream even
+# when the configured backend is Bedrock. In the air-gapped GovCloud runtime
+# that endpoint is intentionally unreachable and its CA chain is unavailable.
+# Upstream explicitly supports disabling only this connectivity probe. This
+# does not alter TLS verification for real Bedrock or other outbound requests.
+ENV HEADROOM_SKIP_UPSTREAM_CHECK=1
+
+USER headroom
+WORKDIR /home/headroom
+
+# Preserve the base image entrypoint and runtime defaults.

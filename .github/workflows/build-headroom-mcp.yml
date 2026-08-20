@@ -27,7 +27,9 @@ jobs:
     with:
       image_name: headroom-mcp
       context: ./images/headroom-mcp
-      dockerfile: ./images/headroom-mcp/Dockerfile
+      # 0.35.0 downstream carry: build-time patch for Cline OpenAI-compatible
+      # traffic to Bedrock. Revert to Dockerfile once the fixes land upstream.
+      dockerfile: ./images/headroom-mcp/Dockerfile.cline-bedrock
       config: images/headroom-mcp/image.yaml
       version_arg: HEADROOM_VERSION
       platforms: linux/amd64
