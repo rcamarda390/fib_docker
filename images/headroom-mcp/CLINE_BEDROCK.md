@@ -30,6 +30,25 @@ Headroom 0.35.0 requires LiteLLM `>=1.86.2,<2.0`; this generation supports both
 message and `tool_config` cache-control injection points for Bedrock Converse.
 Bedrock still applies its model-specific minimum cacheable-token requirements.
 
+## Output-token shaping
+
+The image enables Headroom's output shaper with:
+
+```text
+HEADROOM_OUTPUT_SHAPER=1
+```
+
+Headroom 0.35.0 reads this setting live on each proxy request. This enables
+output-token shaping and allows the dashboard to begin measuring output-token
+savings. No fixed `HEADROOM_VERBOSITY_LEVEL` is set, so Headroom can use its
+learned/default behavior rather than forcing one global verbosity level.
+
+`headroom learn --verbosity --apply` is intentionally not run during the image
+build. Verbosity learning depends on agent session history and should be run in
+the deployed environment when a supported history source is available. Headroom
+0.35.0 documents built-in session scanners for Claude Code, Codex, and Gemini
+CLI; Cline history is not listed as a built-in scanner in that release.
+
 ## Health check in the air-gapped deployment
 
 Headroom 0.35.0's readiness connectivity probe can target the Anthropic HTTP
@@ -39,7 +58,7 @@ it does not disable TLS certificate verification for Bedrock or other traffic.
 
 ## Build strategy
 
-`Dockerfile.cline-bedrock` derives from the last verified `0.35.0-v35` custom
+`Dockerfile.cline-bedrock` derives from the last verified `0.35.0-v36` custom
 image and applies the source patch during the image build. This preserves the
 existing boto3/botocore installation, hardening, and pre-cached compression
 assets without mutating source at container startup or downloading anything at
@@ -61,6 +80,11 @@ upstream Headroom release contains equivalent fixes.
    cache injection points;
 5. requests without stable system/tool boundaries do not cache dynamic turns.
 
-Live GovCloud acceptance still requires the deployment environment and should
-verify cache creation on the first sufficiently large request, cache reads on an
-identical second request, and a real Cline tool-call round trip.
+For output shaping, verify after deployment that `/health` reports
+`HEADROOM_OUTPUT_SHAPER=1` in the effective runtime environment and that normal
+Cline agent/tool requests remain successful. The dashboard can then accumulate
+output-token savings measurements.
+
+Live GovCloud acceptance should also verify cache creation on the first
+sufficiently large request, cache reads on an identical second request, and a
+real Cline tool-call round trip.
