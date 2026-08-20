@@ -94,3 +94,10 @@ the build if the upstream source shape changes.
 After deployment, verify a sufficiently large stable Cline request reports
 cache creation tokens on the first call and cache read tokens on a repeated
 request, while normal Cline tool calls continue to succeed.
+
+## Dashboard
+
+Headroom serves per-request data (`recent_requests`, `/transformations/feed`)
+only to loopback callers, which a bridge-network container is not. See
+`DASHBOARD_TELEMETRY.md` for why the dashboard's Recent Requests table stays
+empty while aggregate telemetry populates, and how to configure around it.
