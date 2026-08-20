@@ -60,7 +60,7 @@ Observed behaviour maps exactly onto the two gates:
 | Caller | Peer IP seen by proxy | `Host:` header | Gate 1 | Gate 2 | `recent_requests` |
 | --- | --- | --- | --- | --- | --- |
 | `curl http://127.0.0.1:8787/stats` on the Docker host | `172.17.0.1` | `127.0.0.1:8787` | pass | **fail** | stripped |
-| Browser at `http://<server-ip>:8787/dashboard` | `172.17.0.1` | `<server-ip>:8787` | **fail** | fail | stripped |
+| Browser **on the Docker host** at `http://<server-ip>:8787/dashboard` | `172.17.0.1` | `<server-ip>:8787` | **fail** | fail | stripped |
 | in-container probe against `127.0.0.1:8788` (see [Validation](#validation)) | `127.0.0.1` | `127.0.0.1:8788` | pass | pass | **served** |
 
 ### Why the aggregates still populate
@@ -103,14 +103,26 @@ No image rebuild is required. The change is in the `docker run` invocation.
 
 ### Option A — trusted gateway CIDR (recommended for bridge networking)
 
-Find the gateway the container actually sees, then allow-list its subnet:
+Derive the subnet from the network the container is actually attached to. Do
+**not** inspect `bridge` by name — a container on a user-defined network (any
+Compose deployment, or `docker run --network <name>`) has a different gateway,
+and allow-listing the default bridge would both leave gate 2 closed and trust an
+unrelated network:
 
 ```bash
-docker inspect -f '{{range .NetworkSettings.Networks}}{{.Gateway}} {{end}}' headroom-ai
-docker network inspect bridge -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+docker inspect -f '{{range $net, $cfg := .NetworkSettings.Networks}}{{$net}} {{$cfg.Gateway}}{{"\n"}}{{end}}' headroom-ai
 ```
 
-Add to the run command:
+That prints `<network-name> <gateway-ip>` per attachment. Feed the name back in
+to get the subnet to allow-list:
+
+```bash
+docker inspect -f '{{range $net, $cfg := .NetworkSettings.Networks}}{{$net}}{{"\n"}}{{end}}' headroom-ai \
+  | xargs -I{} docker network inspect {} -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
+```
+
+Add the subnet that command reports to the run command — `172.17.0.0/16` below is
+the default-bridge value, correct only if that is what you actually got:
 
 ```bash
 -e HEADROOM_PROXY_TRUSTED_GATEWAY_CIDRS=172.17.0.0/16
@@ -134,11 +146,38 @@ all three of:
 * the `Host:` header is an **IP literal** (`10.20.30.40:8787`) — a DNS hostname
   is rejected;
 * `Origin`/`Referer`, if the browser sends them, match that exact scheme/host/port;
-* the resolved client IP falls inside `HEADROOM_PROXY_TRUSTED_DASHBOARD_CLIENT_CIDRS`.
+* the address returned by `resolve_client_ip()` falls inside
+  `HEADROOM_PROXY_TRUSTED_DASHBOARD_CLIENT_CIDRS`.
+
+**The third bullet is the one that bites.** `resolve_client_ip()`
+(`forwarded_headers.py:253`) returns the raw TCP peer address and only
+substitutes `X-Forwarded-For` when the peer is itself inside
+`HEADROOM_PROXY_TRUSTED_GATEWAY_CIDRS`. Headroom also starts uvicorn with
+`proxy_headers=False` (`server.py:5335`) precisely so nothing rewrites
+`request.client.host` behind the guard's back. So the CIDR has to match whatever
+address actually arrives, which depends on the path the traffic takes:
+
+| Path to the published port | Address the guard matches on | CIDR to allow-list |
+| --- | --- | --- |
+| Browser on **another machine**, no reverse proxy | the remote client's own IP (Docker's inbound DNAT does not rewrite an external source address) | the client subnet, e.g. `10.20.0.0/16` |
+| Browser on the **Docker host** itself, via the server's IP | the bridge gateway — the host-local path is SNATed | the bridge subnet (see the caution below) |
+| Behind a reverse proxy that sets `X-Forwarded-For` | the forwarded client IP, **but only if** `HEADROOM_PROXY_TRUSTED_GATEWAY_CIDRS` already covers the proxy's own peer address | the client subnet, plus the gateway CIDR for the proxy |
 
 ```bash
 -e HEADROOM_PROXY_TRUSTED_DASHBOARD_CLIENT_CIDRS=10.20.0.0/16
 ```
+
+Do not paper over row 2 by setting the dashboard-client CIDR to the bridge
+subnet. Every client reaching the published port over that path shares the
+gateway address, so allow-listing it grants per-request metadata to all of them,
+not just to you. For a browser on the Docker host, use Option A with a loopback
+URL instead — that is exactly the case Option A is for.
+
+Which row applies is a property of your network, not of Headroom, so confirm it
+rather than assuming: set the CIDR, load the dashboard from the machine you
+actually intend to use, and check `recent_requests` is an array
+(see [Validation](#validation)). If it is still `null`, the address the guard saw
+was not in the CIDR you set.
 
 Options A and B are independent and can be combined.
 
