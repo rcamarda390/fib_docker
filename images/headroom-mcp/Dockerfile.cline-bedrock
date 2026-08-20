@@ -18,6 +18,13 @@ RUN set -eu; \
     python /tmp/bedrock-openai-regression.py; \
     rm -f /tmp/patch-headroom-bedrock-openai.py /tmp/bedrock-openai-regression.py
 
+# Headroom 0.35.0's readiness probe targets the Anthropic HTTP upstream even
+# when the configured backend is Bedrock. In the air-gapped GovCloud runtime
+# that endpoint is intentionally unreachable and its CA chain is unavailable.
+# Upstream explicitly supports disabling only this connectivity probe. This
+# does not alter TLS verification for real Bedrock or other outbound requests.
+ENV HEADROOM_SKIP_UPSTREAM_CHECK=1
+
 USER headroom
 WORKDIR /home/headroom
 
