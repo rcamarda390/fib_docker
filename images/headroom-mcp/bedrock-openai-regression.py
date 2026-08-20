@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Build-time regression tests for fib_docker's Headroom Bedrock patch."""
 import asyncio
-from types import SimpleNamespace
 
 import headroom.backends.litellm as module
 
@@ -19,37 +18,55 @@ def backend(provider: str):
     return b
 
 
-async def capture_nonstream(provider: str, body: dict):
+async def capture_nonstream(provider: str, body: dict, *, cache_supported: bool = True):
     captured = {}
 
     async def fake(**kwargs):
         captured.update(kwargs)
         raise StopCall("captured")
 
-    original = module.acompletion
+    original_completion = module.acompletion
+    original_supported = module.litellm.get_supported_openai_params
     module.acompletion = fake
+    module.litellm.get_supported_openai_params = (
+        lambda **_: ["cache_control"] if cache_supported else ["tools"]
+    )
     try:
         await backend(provider).send_openai_message(body, {})
     finally:
-        module.acompletion = original
+        module.acompletion = original_completion
+        module.litellm.get_supported_openai_params = original_supported
     return captured
 
 
-async def capture_stream(provider: str, body: dict):
+async def capture_stream(provider: str, body: dict, *, cache_supported: bool = True):
     captured = {}
 
     async def fake(**kwargs):
         captured.update(kwargs)
         raise StopCall("captured")
 
-    original = module.acompletion
+    original_completion = module.acompletion
+    original_supported = module.litellm.get_supported_openai_params
     module.acompletion = fake
+    module.litellm.get_supported_openai_params = (
+        lambda **_: ["cache_control"] if cache_supported else ["tools"]
+    )
     try:
         async for _ in backend(provider).stream_openai_message(body, {}):
             pass
     finally:
-        module.acompletion = original
+        module.acompletion = original_completion
+        module.litellm.get_supported_openai_params = original_supported
     return captured
+
+
+def assert_system_cached(messages):
+    system = next(m for m in messages if m.get("role") == "system")
+    assert system.get("cache_control") == {"type": "ephemeral"}
+    for message in messages:
+        if message.get("role") in {"user", "assistant"}:
+            assert "cache_control" not in message
 
 
 async def main():
@@ -72,37 +89,50 @@ async def main():
         "parallel_tool_calls": True,
     }
 
-    expected_points = [
-        {"location": "message", "role": "system"},
-        {"location": "tool_config"},
-    ]
-
+    # Supported Bedrock models: both OpenAI paths strip the unsafe passthrough
+    # field and mark only the stable system prefix using native cache_control.
     for capture in (capture_nonstream, capture_stream):
-        got = await capture("bedrock", body)
+        got = await capture("bedrock", body, cache_supported=True)
         assert "parallel_tool_calls" not in got.get("extra_body", {})
-        assert got["cache_control_injection_points"] == expected_points
-        assert not any(p.get("role") in {"user", "assistant"} for p in expected_points)
+        assert "cache_control_injection_points" not in got
+        assert_system_cached(got["messages"])
 
-    # Provider-specific behavior: non-Bedrock providers retain the OpenAI field
-    # and do not receive Bedrock cache-control injection points.
-    got = await capture_nonstream("openrouter", body)
+    # Unsupported Bedrock models: no cache marker is added. This is the required
+    # graceful-off behavior for models without prompt-caching support.
+    got = await capture_nonstream("bedrock", body, cache_supported=False)
+    assert "cache_control_injection_points" not in got
+    assert not any("cache_control" in m for m in got["messages"])
+
+    # Non-Bedrock providers retain the original OpenAI passthrough behavior and
+    # never receive our Bedrock-specific cache markers.
+    got = await capture_nonstream("openrouter", body, cache_supported=True)
     assert got["extra_body"]["parallel_tool_calls"] is True
     assert "cache_control_injection_points" not in got
+    assert not any("cache_control" in m for m in got["messages"])
 
-    # No tools means no tool_config cache point; no system means no automatic
-    # cache point at all. This protects dynamic conversation content.
-    no_tools = dict(body)
-    no_tools.pop("tools")
-    got = await capture_nonstream("bedrock", no_tools)
-    assert got["cache_control_injection_points"] == [
-        {"location": "message", "role": "system"}
-    ]
-
+    # No system prompt means there is no stable prefix for this patch to mark.
     dynamic_only = dict(body)
     dynamic_only["messages"] = [{"role": "user", "content": "changes"}]
-    dynamic_only.pop("tools")
-    got = await capture_nonstream("bedrock", dynamic_only)
-    assert "cache_control_injection_points" not in got
+    got = await capture_nonstream("bedrock", dynamic_only, cache_supported=True)
+    assert not any("cache_control" in m for m in got["messages"])
+
+    # List-form system content must preserve block structure and put the marker
+    # on the last block, matching LiteLLM's native Bedrock transformation.
+    block_system = dict(body)
+    block_system["messages"] = [
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": "prefix"},
+                {"type": "text", "text": "stable suffix"},
+            ],
+        },
+        {"role": "user", "content": "dynamic"},
+    ]
+    got = await capture_nonstream("bedrock", block_system, cache_supported=True)
+    system = got["messages"][0]
+    assert system["content"][-1]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in system["content"][0]
 
     print("Bedrock OpenAI regression tests: PASS")
 
