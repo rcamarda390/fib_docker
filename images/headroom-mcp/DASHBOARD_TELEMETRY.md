@@ -61,7 +61,7 @@ Observed behaviour maps exactly onto the two gates:
 | --- | --- | --- | --- | --- | --- |
 | `curl http://127.0.0.1:8787/stats` on the Docker host | `172.17.0.1` | `127.0.0.1:8787` | pass | **fail** | stripped |
 | Browser at `http://<server-ip>:8787/dashboard` | `172.17.0.1` | `<server-ip>:8787` | **fail** | fail | stripped |
-| `docker exec headroom-ai curl http://127.0.0.1:8788/stats` | `127.0.0.1` | `127.0.0.1:8788` | pass | pass | **served** |
+| in-container probe against `127.0.0.1:8788` (see [Validation](#validation)) | `127.0.0.1` | `127.0.0.1:8788` | pass | pass | **served** |
 
 ### Why the aggregates still populate
 
@@ -158,7 +158,7 @@ dashboard's Live Feed panel stays empty even after Option A or B. Recent Request
 in-container client:
 
 ```bash
-docker exec headroom-ai curl -s "http://127.0.0.1:8788/transformations/feed?limit=5"
+docker exec headroom-ai python -c "import urllib.request,json; print(json.dumps(json.load(urllib.request.urlopen('http://127.0.0.1:8788/transformations/feed?limit=5',timeout=10)),indent=2))"
 ```
 
 Message bodies in the feed additionally require full message logging, which is
@@ -175,15 +175,22 @@ Without it the feed still returns entries; `request_messages`,
 
 Run these against the deployed container.
 
+**The runtime image has no `curl`.** It is installed in the builder stage only
+(`Dockerfile:33`), and the hardened runtime stage never adds it — which is why
+`mcp-smoke.py` probes over `urllib`. `docker exec headroom-ai curl ...` fails
+with `OCI runtime exec failed: ... executable file not found in $PATH`; piped
+into `jq` that surfaces as the misleading
+`parse error: Invalid numeric literal at line 1, column 4`. In-container probes
+below therefore use `python`, which is on `PATH` via `/opt/venv/bin`. Host-side
+probes use `curl` normally.
+
 Baseline — prove the request log is populated, independent of any gate:
 
 ```bash
-docker exec headroom-ai curl -s http://127.0.0.1:8788/stats \
-  | jq '{type: (.recent_requests|type), count: (.recent_requests|length),
-         latest: (.recent_requests[0] // null)}'
+docker exec headroom-ai python -c "import urllib.request,json; r=json.load(urllib.request.urlopen('http://127.0.0.1:8788/stats',timeout=10)).get('recent_requests'); print('type:',type(r).__name__,'count:',len(r) if isinstance(r,list) else 0)"
 ```
 
-Expect `"array"` and a non-zero count after traffic has flowed. This alone
+Expect `type: list` and a non-zero count after traffic has flowed. This alone
 distinguishes "data missing" from "data withheld".
 
 Then confirm the host-side path before the fix:
@@ -205,8 +212,14 @@ Confirm the strict-guard endpoints with status codes, not body shape:
 ```bash
 curl -s -o /dev/null -w 'feed=%{http_code}\n'      http://127.0.0.1:8787/transformations/feed
 curl -s -o /dev/null -w 'telemetry=%{http_code}\n' http://127.0.0.1:8787/v1/telemetry
-docker exec headroom-ai curl -s -o /dev/null -w 'feed_in=%{http_code}\n' \
-  http://127.0.0.1:8788/transformations/feed
+docker exec headroom-ai python -c "
+import urllib.request, urllib.error
+for path in ('/transformations/feed', '/v1/telemetry'):
+    try:
+        print(path, urllib.request.urlopen('http://127.0.0.1:8788' + path, timeout=10).status)
+    except urllib.error.HTTPError as exc:
+        print(path, exc.code)
+"
 ```
 
 `404` from the host with `200` from inside the container confirms the guard
