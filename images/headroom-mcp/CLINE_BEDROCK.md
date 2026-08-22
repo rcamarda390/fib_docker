@@ -1,11 +1,11 @@
-# Cline 4.0.12 → Headroom 0.35.0 → AWS Bedrock
+# Cline 4.0.12 → Headroom 0.36.3 → AWS Bedrock
 
-This image carries a downstream Headroom 0.35.0 compatibility patch for Cline's
+This image carries a downstream Headroom 0.36.3 compatibility patch for Cline's
 OpenAI-compatible transport to AWS Bedrock.
 
 ## Request shaping
 
-Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.35.0 treats unknown
+Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.36.3 treats unknown
 OpenAI request keys as `extra_body`, and LiteLLM consequently forwards this key
 toward Bedrock, which rejects it. The downstream patch removes only
 `parallel_tool_calls` from `extra_body` when the configured Headroom provider is
@@ -57,7 +57,7 @@ The image enables Headroom's output shaper with:
 HEADROOM_OUTPUT_SHAPER=1
 ```
 
-Headroom 0.35.0 reads this setting live on each proxy request. No fixed
+Headroom 0.36.3 reads this setting live on each proxy request. No fixed
 `HEADROOM_VERBOSITY_LEVEL` is set.
 
 `headroom learn --verbosity --apply` remains a deployment-time operation because
@@ -65,7 +65,7 @@ it depends on agent session history.
 
 ## Health check in the air-gapped deployment
 
-The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.35.0's
+The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.36.3's
 external upstream readiness probe in the air-gapped Bedrock deployment. This
 does not weaken TLS verification for Bedrock traffic.
 
@@ -75,8 +75,52 @@ does not weaken TLS verification for Bedrock traffic.
 and applies the source patch during image build. Existing boto3/botocore,
 hardening, and pre-cached compression assets remain self-contained.
 
-The patch script expects exactly two Headroom 0.35.0 OpenAI call sites and fails
-the build if the upstream source shape changes.
+The patch script expects exactly two Headroom 0.36.3 OpenAI call sites and fails
+the build if the upstream source shape changes. Both are still present and
+byte-identical at `v0.36.3`, and the regression suite below passes against a
+patched 0.36.3 install.
+
+## Upgrading Headroom while this carry exists
+
+The carry is built from a *published* base image, so a version bump takes two
+builds and they have to run in that order. `images/headroom-mcp/image.yaml`
+carries the version for both.
+
+1. Bump `upstream_version` and `build_args.HEADROOM_COMMIT` to the new tag and
+   its commit (`git ls-remote --tags https://github.com/headroomlabs-ai/headroom.git`),
+   set `revision: 0`, and update `ARG HEADROOM_VERSION` / `ARG HEADROOM_COMMIT`
+   in `Dockerfile` to match. The build asserts the installed
+   `headroom-ai` version equals `HEADROOM_VERSION`, and the source stage
+   asserts the cloned tag equals `HEADROOM_COMMIT`, so a mismatch fails the
+   build rather than shipping.
+2. Repoint `ARG HEADROOM_BASE_IMAGE` in `Dockerfile.cline-bedrock` at
+   `<new-version>-v1` — the tag step 3 publishes.
+3. Run the **Build and publish Headroom MCP image** workflow with
+   `dockerfile: Dockerfile`. That publishes the unpatched base image as
+   `<new-version>-v1` and opens the revision-bump PR; merge it.
+4. Run the same workflow again on its default (`Dockerfile.cline-bedrock`).
+   It builds on `<new-version>-v1` and publishes the patched
+   `<new-version>-v2`, which is the image to deploy.
+
+Between steps 2 and 3 a carry build fails on `manifest unknown`, because the
+base tag it pins does not exist yet. That is deliberate: the alternative — a
+base pin left on the previous version — publishes an image tagged with the new
+version that still contains the old Headroom.
+
+Re-verify the patch against the new release before step 4 rather than
+discovering it in CI. From `images/headroom-mcp/`, against the real package:
+
+```bash
+uv venv --python 3.13 /tmp/hr && \
+uv pip install --python /tmp/hr/bin/python "headroom-ai==<new-version>" && \
+target=$(/tmp/hr/bin/python -c 'import headroom.backends.litellm as m; print(m.__file__)') && \
+/tmp/hr/bin/python patch-headroom-bedrock-openai.py "$target" && \
+/tmp/hr/bin/python -m py_compile "$target" && \
+/tmp/hr/bin/python bedrock-openai-regression.py
+```
+
+The patch script fails closed when the two call sites it anchors on no longer
+match, so a clean run here is what makes the upgrade safe to build.
 
 ## Verification
 

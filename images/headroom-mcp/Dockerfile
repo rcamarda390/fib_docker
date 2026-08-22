@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG HEADROOM_VERSION=0.35.0
-ARG HEADROOM_COMMIT=93f2d7a2da4d3b6c88f31bad164ae299cf042104
+ARG HEADROOM_VERSION=0.36.3
+ARG HEADROOM_COMMIT=87e71dd10057ff3cbe826bde617682971339e4f8
 ARG PYTHON_VERSION=3.13
 ARG PIP_VERSION=26.2.1
 ARG RUSTUP_VERSION=1.28.2
@@ -71,10 +71,12 @@ RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 # `python -m pip` invocation against this venv fails with "No module named
 # pip" -- use `uv pip install --python /opt/venv/bin/python` if a package ever
 # genuinely needs adding. The setuptools/msgpack upgrades that used to live
-# here targeted packages that headroom 0.35.0 does not install: uv resolves 69
-# packages into this venv and neither is among them, so the upgrade would have
-# added CVE surface rather than removing it. Trivy scans the built image and
-# will report either package if it reappears with a known advisory (reported
+# here targeted packages that headroom does not install: neither appears in the
+# proxy+bedrock resolution of the pinned lockfile, so the upgrade would have
+# added CVE surface rather than removing it. Re-check that on a version bump
+# with `uv export --frozen --extra proxy --extra bedrock --no-dev` against the
+# release being pinned; it still holds for 0.36.3. Trivy scans the built image
+# and will report either package if it reappears with a known advisory (reported
 # only, not blocking: this image leaves block_on_scan_failure at its default).
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \

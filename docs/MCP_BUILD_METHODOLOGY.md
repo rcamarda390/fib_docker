@@ -26,9 +26,24 @@ The `sqz-mcp` build vendors `images/sqz-mcp/Cargo.lock` because its upstream
 repository does not commit a lockfile. Regenerate that lockfile with
 `cargo generate-lockfile` whenever `SQZ_VERSION` changes.
 
-Image builds are manual: each image caller workflow is triggered only with
-`workflow_dispatch`, so merges, pull requests, and scheduled runs do not build
-or publish images. Run the workflow for the image you want to build.
+Image builds are manual: each image caller workflow is triggered with
+`workflow_dispatch`, so pull requests and scheduled runs do not build or publish
+images. Run the workflow for the image you want to build. `headroom-mcp` is the
+one exception — it also builds on a push to `main` under
+`images/headroom-mcp/**`, which matters when bumping its version (below).
+
+`headroom-mcp` currently ships a downstream source patch for Cline's
+OpenAI-compatible Bedrock transport, so it has two Dockerfiles:
+`Dockerfile` builds the upstream base image, and `Dockerfile.cline-bedrock`
+applies the patch on top of a *published* base tag it pins in
+`HEADROOM_BASE_IMAGE`. Bumping `upstream_version` therefore needs two builds in
+order — the base first (dispatch the workflow with `dockerfile: Dockerfile`),
+then the carry — and the pin has to be moved to the new version's `-v1` tag as
+part of the same change. Leaving it on the old version's tag publishes an image
+whose tag says one Headroom version and whose contents are another. The full
+procedure, including how to re-verify the patch against the new release before
+building, is in
+[`images/headroom-mcp/CLINE_BEDROCK.md`](../images/headroom-mcp/CLINE_BEDROCK.md).
 
 `gnosis-mcp` currently means the air-gap build: its ONNX embedding model is
 pre-bundled and the image is labeled with `gnosis.airgap=true`. The air-gap
