@@ -1,7 +1,9 @@
 # Dashboard Recent Requests, Live Feed, and provider labels
 
-Operational guidance for the `headroom-mcp` image (Headroom 0.35.0, commit
-`93f2d7a2da4d3b6c88f31bad164ae299cf042104`).
+Operational guidance for the `headroom-mcp` image (Headroom 0.36.3, commit
+`87e71dd10057ff3cbe826bde617682971339e4f8`). Every source citation below was
+re-checked against that tag; the behaviour is unchanged from 0.35.0, only the
+line numbers moved.
 
 ## Symptom
 
@@ -30,18 +32,18 @@ Docker bridge networking.
 per-request metadata is served only to callers Headroom classifies as local:
 
 ```python
-# headroom/proxy/server.py:4359
+# headroom/proxy/server.py:4480
 include_sensitive = _request_can_view_dashboard_metadata(
     request, trusted_dashboard_client_cidrs
 )
 ...
 if not include_sensitive:
     # _build_stats_payload bakes these in; strip for network callers.
-    payload.pop("recent_requests", None)   # server.py:4375
+    payload.pop("recent_requests", None)   # server.py:4496
     payload.pop("request_logs", None)
 ```
 
-`_request_is_loopback()` (`server.py:2324`) requires **both** gates to pass:
+`_request_is_loopback()` (`server.py:2362`) requires **both** gates to pass:
 
 1. the `Host:` header must name loopback (`127.0.0.1`, `::1`, `localhost`,
    optionally with a port) — this is the DNS-rebinding defence; and
@@ -68,13 +70,13 @@ Observed behaviour maps exactly onto the two gates:
 Both effects run from the same funnel, `record_request_outcome()`:
 
 ```text
-headroom/proxy/outcome.py:479   await handler.metrics.record_request(...)   # /stats aggregates, history
-headroom/proxy/outcome.py:525   request_logger = getattr(handler, "logger", None)
-headroom/proxy/outcome.py:532   request_logger.log(RequestLog(...))        # recent_requests source
+headroom/proxy/outcome.py:500   await handler.metrics.record_request(...)   # /stats aggregates, history
+headroom/proxy/outcome.py:551   request_logger = getattr(handler, "logger", None)
+headroom/proxy/outcome.py:559   request_logger.log(RequestLog(...))        # recent_requests source
 ```
 
-`ProxyConfig.log_requests` defaults to `True` (`headroom/proxy/models.py:334`)
-and has no CLI flag or environment override in 0.35.0, so the in-memory request
+`ProxyConfig.log_requests` defaults to `True` (`headroom/proxy/models.py:343`)
+and has no CLI flag or environment override in 0.36.3, so the in-memory request
 deque (10 000 entries) is always being filled. Because the aggregate counters are
 populating, the per-request log is populating too. The data exists; the response
 withholds it.
@@ -86,7 +88,7 @@ key entirely — which is why `jq '.recent_requests | type'` reports `"null"`.
 ### The same gate explains the other two observations
 
 `/transformations/feed` and `/v1/telemetry` use the **strict** guard,
-`loopback_guard.require_loopback` (`server.py:4422`, `server.py:4685`), which
+`loopback_guard.require_loopback` (`server.py:4546`, `server.py:4820`), which
 raises **404 — not 403** so the endpoints stay invisible to scanners
 (`headroom/proxy/loopback_guard.py:173-216`). It has no trusted-CIDR escape
 hatch. A `GET /v1/telemetry` that is registered in the OpenAPI document but
@@ -140,7 +142,7 @@ the gate, so a typo fails loudly.
 ### Option B — remote dashboard by server IP
 
 If the dashboard is opened from another machine, gate 1 can never pass, and
-`_request_can_view_dashboard_metadata` (`server.py:2367`) takes over. It requires
+`_request_can_view_dashboard_metadata` (`server.py:2405`) takes over. It requires
 all three of:
 
 * the `Host:` header is an **IP literal** (`10.20.30.40:8787`) — a DNS hostname
@@ -153,7 +155,7 @@ all three of:
 (`forwarded_headers.py:253`) returns the raw TCP peer address and only
 substitutes `X-Forwarded-For` when the peer is itself inside
 `HEADROOM_PROXY_TRUSTED_GATEWAY_CIDRS`. Headroom also starts uvicorn with
-`proxy_headers=False` (`server.py:5335`) precisely so nothing rewrites
+`proxy_headers=False` (`server.py:5507`) precisely so nothing rewrites
 `request.client.host` behind the guard's back. So the CIDR has to match whatever
 address actually arrives, which depends on the path the traffic takes:
 
@@ -281,7 +283,7 @@ The dashboard label `litellm-bedrock` comes from `LiteLLMBackend.name`
 `headroom/providers/registry.py:223`.
 
 **`--provider-name` does not rename it.** `resolve_display_provider()`
-(`headroom/proxy/helpers.py:954-972`) reclassifies only requests whose raw
+(`headroom/proxy/helpers.py:1128-1146`) reclassifies only requests whose raw
 provider is exactly `openai`; every other label, `litellm-bedrock` included, is
 returned unchanged. The flag is for OpenAI-compatible upstreams such as
 OpenRouter.
@@ -341,6 +343,6 @@ deployment decisions for this air-gapped GovCloud runtime.
 Separately, the container binds `--host 0.0.0.0` with no `HEADROOM_PROXY_TOKEN`,
 so the `/v1/*` data-plane routes are reachable unauthenticated by anything that
 can reach the published port. Headroom logs a warning about this at startup
-(`headroom/proxy/server.py:3285`). The loopback gating described above is what
+(`headroom/proxy/server.py:3370`). The loopback gating described above is what
 keeps prompt content and per-request metadata off that surface — which is why
 widening it should be done with the narrowest CIDR that works.
