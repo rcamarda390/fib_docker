@@ -86,6 +86,39 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import boto3, botocore; \
      print(f'Bedrock dependencies OK: boto3 {boto3.__version__}, botocore {botocore.__version__}')"
 
+# ---------------------------------------------------------------------------
+# Downstream carry: Cline's OpenAI-compatible transport to AWS Bedrock.
+# Short-lived -- delete this block, the two ENV lines in the runtime stage that
+# reference it, and the two scripts, once the fixes land upstream. See
+# CLINE_BEDROCK.md.
+#
+# This patches the installed venv rather than a published base image. An
+# earlier revision applied it in a second Dockerfile that built FROM the
+# published base tag, which meant every version bump needed two ordered builds
+# and left the base pin able to go stale -- a carry build could publish an
+# image tagged with the new Headroom version while still containing the old
+# one. One Dockerfile cannot get that wrong.
+#
+# It runs after the identity checks above deliberately: if the venv is not the
+# Headroom release we think it is, that should fail as a version mismatch, not
+# as a confusing patch-anchor mismatch. It also runs before the Hugging Face
+# cache step, so a patch that no longer applies fails in seconds instead of
+# after a multi-minute model download.
+#
+# patch-headroom-bedrock-openai.py fails closed when upstream's two OpenAI call
+# sites no longer match, and bedrock-openai-regression.py asserts the resulting
+# behaviour, so a Headroom upgrade cannot silently ship an unpatched or
+# half-patched image. Neither script is copied into the runtime stage -- only
+# /opt/venv and /opt/headroom-cache cross the stage boundary.
+COPY patch-headroom-bedrock-openai.py bedrock-openai-regression.py /tmp/
+RUN set -eu; \
+    export PATH="/opt/venv/bin:${PATH}"; \
+    target="$(python -c 'import headroom.backends.litellm as m; print(m.__file__)')"; \
+    python /tmp/patch-headroom-bedrock-openai.py "$target"; \
+    python -m py_compile "$target"; \
+    python /tmp/bedrock-openai-regression.py
+# ---------------------------------------------------------------------------
+
 # Pre-cache Hugging Face models needed for Kompress compression in the air-gapped runtime.
 # When HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 are set at runtime, these models
 # must already be present in the image cache. Kompress uses:
@@ -167,6 +200,20 @@ ENV HEADROOM_HOST=0.0.0.0 \
     HF_HUB_DISABLE_TELEMETRY=1 \
     LITELLM_LOCAL_MODEL_COST_MAP=True \
     HEADROOM_UPDATE_CHECK=off
+
+# Headroom's readiness probe targets the Anthropic HTTP upstream even when the
+# configured backend is Bedrock. In the air-gapped GovCloud runtime that
+# endpoint is intentionally unreachable and its CA chain is unavailable.
+# Upstream explicitly supports disabling only this connectivity probe. This
+# does not alter TLS verification for real Bedrock or other outbound requests.
+ENV HEADROOM_SKIP_UPSTREAM_CHECK=1
+
+# Enable Headroom output-token shaping. This is a live per-request knob the
+# proxy reads on each request, and it enables dashboard measurement of output
+# savings. No fixed HEADROOM_VERBOSITY_LEVEL is set; a learned verbosity
+# profile can be applied later with `headroom learn --verbosity --apply` when
+# supported session history is mounted.
+ENV HEADROOM_OUTPUT_SHAPER=1
 
 RUN apt-get update \
     && apt-get upgrade -y \

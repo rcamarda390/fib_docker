@@ -30,19 +30,21 @@ Image builds are manual: each image caller workflow is triggered with
 `workflow_dispatch`, so pull requests and scheduled runs do not build or publish
 images. Run the workflow for the image you want to build. `headroom-mcp` is the
 one exception — it also builds on a push to `main` under
-`images/headroom-mcp/**`, which matters when bumping its version (below).
+`images/headroom-mcp/**`, so merging a change to it publishes a new revision.
 
 `headroom-mcp` currently ships a downstream source patch for Cline's
-OpenAI-compatible Bedrock transport, so it has two Dockerfiles:
-`Dockerfile` builds the upstream base image, and `Dockerfile.cline-bedrock`
-applies the patch on top of a *published* base tag it pins in
-`HEADROOM_BASE_IMAGE`. Bumping `upstream_version` therefore needs two builds in
-order — the base first (dispatch the workflow with `dockerfile: Dockerfile`),
-then the carry — and the pin has to be moved to the new version's `-v1` tag as
-part of the same change. Leaving it on the old version's tag publishes an image
-whose tag says one Headroom version and whose contents are another. The full
-procedure, including how to re-verify the patch against the new release before
-building, is in
+OpenAI-compatible Bedrock transport. It is applied in the builder stage of the
+image's own `Dockerfile`, against the venv `uv sync` produced, so one build
+yields the finished image.
+
+It briefly lived in a second Dockerfile that applied the patch `FROM` the
+published base tag instead. Don't reintroduce that shape for a downstream
+patch: it makes a version bump two ordered builds, publishes an intermediate
+base tag nobody deploys, and adds a hand-maintained base pin that goes stale
+silently — a stale pin publishes an image whose tag names one Headroom version
+while its contents are another. A patch applied inside the build cannot drift
+from the version the tag claims. How to re-verify the patch against a new
+release before building is in
 [`images/headroom-mcp/CLINE_BEDROCK.md`](../images/headroom-mcp/CLINE_BEDROCK.md).
 
 `gnosis-mcp` currently means the air-gap build: its ONNX embedding model is

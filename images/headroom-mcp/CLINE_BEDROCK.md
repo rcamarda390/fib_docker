@@ -71,44 +71,52 @@ does not weaken TLS verification for Bedrock traffic.
 
 ## Build strategy
 
-`Dockerfile.cline-bedrock` derives from the verified custom Headroom base image
-and applies the source patch during image build. Existing boto3/botocore,
-hardening, and pre-cached compression assets remain self-contained.
+The patch is applied inside `Dockerfile`'s builder stage, straight onto the
+venv `uv sync` produced, immediately after the checks that assert the venv is
+the pinned Headroom release. One build produces the finished image; there is no
+separate carry image and nothing to sequence.
+
+It was two Dockerfiles until 0.36.3-v2: a base image, and a
+`Dockerfile.cline-bedrock` that applied the patch `FROM` the published base
+tag. That shape had two costs. A version bump needed two builds run in the
+right order, with the intermediate base tag published as its own artifact. And
+the base pin was a hand-maintained string: leaving it on the previous version
+published an image whose tag named the new Headroom release while its contents
+were the old one. Building one image cannot get either wrong.
 
 The patch script expects exactly two Headroom 0.36.3 OpenAI call sites and fails
-the build if the upstream source shape changes. Both are still present and
+the build if the upstream source shape changes. Both are present and
 byte-identical at `v0.36.3`, and the regression suite below passes against a
 patched 0.36.3 install.
 
+Neither script reaches the runtime image: they are copied into `/tmp` in the
+builder stage, and only `/opt/venv` and `/opt/headroom-cache` cross into
+runtime.
+
+To drop the carry once the fixes land upstream, delete the marked block in
+`Dockerfile`, the `HEADROOM_SKIP_UPSTREAM_CHECK` and `HEADROOM_OUTPUT_SHAPER`
+ENV lines in its runtime stage, and these two scripts.
+
 ## Upgrading Headroom while this carry exists
 
-The carry is built from a *published* base image, so a version bump takes two
-builds and they have to run in that order. `images/headroom-mcp/image.yaml`
-carries the version for both.
+A version bump is one build. `images/headroom-mcp/image.yaml` carries the
+version.
 
 1. Bump `upstream_version` and `build_args.HEADROOM_COMMIT` to the new tag and
    its commit (`git ls-remote --tags https://github.com/headroomlabs-ai/headroom.git`),
-   set `revision: 0`, and update `ARG HEADROOM_VERSION` / `ARG HEADROOM_COMMIT`
-   in `Dockerfile` to match. The build asserts the installed
-   `headroom-ai` version equals `HEADROOM_VERSION`, and the source stage
-   asserts the cloned tag equals `HEADROOM_COMMIT`, so a mismatch fails the
-   build rather than shipping.
-2. Repoint `ARG HEADROOM_BASE_IMAGE` in `Dockerfile.cline-bedrock` at
-   `<new-version>-v1` — the tag step 3 publishes.
-3. Run the **Build and publish Headroom MCP image** workflow with
-   `dockerfile: Dockerfile`. That publishes the unpatched base image as
-   `<new-version>-v1` and opens the revision-bump PR; merge it.
-4. Run the same workflow again on its default (`Dockerfile.cline-bedrock`).
-   It builds on `<new-version>-v1` and publishes the patched
-   `<new-version>-v2`, which is the image to deploy.
+   and update `ARG HEADROOM_VERSION` / `ARG HEADROOM_COMMIT` in `Dockerfile` to
+   match. The source stage asserts the cloned tag equals `HEADROOM_COMMIT` and
+   the builder asserts the installed `headroom-ai` version equals
+   `HEADROOM_VERSION`, so a mismatch fails the build rather than shipping.
+   Leave `revision:` alone -- build-image.yml resets it to 1 when the version
+   line changes.
+2. Re-verify the patch against the new release (below).
+3. Run the **Build and publish Headroom MCP image** workflow, or just merge:
+   a push to `main` under `images/headroom-mcp/**` builds it too. Merge the
+   revision-bump PR the build opens.
 
-Between steps 2 and 3 a carry build fails on `manifest unknown`, because the
-base tag it pins does not exist yet. That is deliberate: the alternative — a
-base pin left on the previous version — publishes an image tagged with the new
-version that still contains the old Headroom.
-
-Re-verify the patch against the new release before step 4 rather than
-discovering it in CI. From `images/headroom-mcp/`, against the real package:
+Step 2 is worth doing before step 3 rather than discovering it in CI. From
+`images/headroom-mcp/`, against the real package:
 
 ```bash
 uv venv --python 3.13 /tmp/hr && \
@@ -119,8 +127,9 @@ target=$(/tmp/hr/bin/python -c 'import headroom.backends.litellm as m; print(m._
 /tmp/hr/bin/python bedrock-openai-regression.py
 ```
 
-The patch script fails closed when the two call sites it anchors on no longer
-match, so a clean run here is what makes the upgrade safe to build.
+That is the same sequence the builder stage runs. The patch script fails closed
+when the two call sites it anchors on no longer match, so a clean run here is
+what makes the upgrade safe to build.
 
 ## Verification
 
