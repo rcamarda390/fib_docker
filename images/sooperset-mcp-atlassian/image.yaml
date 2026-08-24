@@ -1,6 +1,6 @@
 name: sooperset-mcp-atlassian
 upstream_version: 1.0.0
-revision: 6
+revision: 7
 build_args: {}
 publish:
   ghcr: true
