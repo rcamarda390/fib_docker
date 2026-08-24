@@ -47,6 +47,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN find /app/.venv -name '__pycache__' -type d -exec rm -rf {} + && \
     find /app/.venv -name '*.pyc' -delete && \
     find /app/.venv -name '*.pyo' -delete && \
+    find /app/.venv -path '*/site-packages/setuptools*' -delete && \
+    find /app/.venv -path '*/site-packages/pip*' -delete && \
     echo "Cleaned up .venv"
 
 # Final stage -- same base image/version as the builder above
