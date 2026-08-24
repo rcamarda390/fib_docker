@@ -1,6 +1,6 @@
 # Dashboard Recent Requests, Live Feed, and provider labels
 
-Operational guidance for the `headroom-mcp` image (Headroom 0.36.3, commit
+Operational guidance for the `headroom-mcp` image (Headroom 0.36.5, commit
 `87e71dd10057ff3cbe826bde617682971339e4f8`). Every source citation below was
 re-checked against that tag; the behaviour is unchanged from 0.35.0, only the
 line numbers moved.
@@ -76,7 +76,7 @@ headroom/proxy/outcome.py:559   request_logger.log(RequestLog(...))        # rec
 ```
 
 `ProxyConfig.log_requests` defaults to `True` (`headroom/proxy/models.py:343`)
-and has no CLI flag or environment override in 0.36.3, so the in-memory request
+and has no CLI flag or environment override in 0.36.5, so the in-memory request
 deque (10 000 entries) is always being filled. Because the aggregate counters are
 populating, the per-request log is populating too. The data exists; the response
 withholds it.

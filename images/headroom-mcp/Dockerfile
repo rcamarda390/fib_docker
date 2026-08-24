@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG HEADROOM_VERSION=0.36.3
-ARG HEADROOM_COMMIT=87e71dd10057ff3cbe826bde617682971339e4f8
+ARG HEADROOM_VERSION=0.36.5
+ARG HEADROOM_COMMIT=34a551756222b24ea4bc064f4250b8e7d169daf1
 ARG PYTHON_VERSION=3.13
 ARG PIP_VERSION=26.2.1
 ARG RUSTUP_VERSION=1.28.2
@@ -75,7 +75,7 @@ RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 # proxy+bedrock resolution of the pinned lockfile, so the upgrade would have
 # added CVE surface rather than removing it. Re-check that on a version bump
 # with `uv export --frozen --extra proxy --extra bedrock --no-dev` against the
-# release being pinned; it still holds for 0.36.3. Trivy scans the built image
+# release being pinned; it still holds for 0.36.5. Trivy scans the built image
 # and will report either package if it reappears with a known advisory (reported
 # only, not blocking: this image leaves block_on_scan_failure at its default).
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
