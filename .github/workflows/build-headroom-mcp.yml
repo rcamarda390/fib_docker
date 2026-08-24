@@ -16,9 +16,9 @@ on:
           - Dockerfile.cline-bedrock
           - Dockerfile
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
     paths: ['images/headroom-mcp/**']
-  
+
 
 permissions:
   contents: write
@@ -29,8 +29,34 @@ permissions:
   pull-requests: write
 
 jobs:
-  build:
-    name: Build and publish Headroom MCP image
+  detect-version-change:
+    name: Detect if upstream_version changed
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check.outputs.version_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: check
+        run: |
+          if git show HEAD:images/headroom-mcp/image.yaml | grep -q "^upstream_version:"; then
+            OLD_VERSION=$(git show HEAD~1:images/headroom-mcp/image.yaml 2>/dev/null | grep "^upstream_version:" | awk '{print $2}' || echo "")
+            NEW_VERSION=$(git show HEAD:images/headroom-mcp/image.yaml | grep "^upstream_version:" | awk '{print $2}')
+            if [ "$OLD_VERSION" != "$NEW_VERSION" ] && [ -n "$OLD_VERSION" ]; then
+              echo "version_changed=true" >> $GITHUB_OUTPUT
+              echo "Version changed from $OLD_VERSION to $NEW_VERSION"
+            else
+              echo "version_changed=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-base:
+    name: Build base Dockerfile (upstream)
+    needs: detect-version-change
+    if: needs.detect-version-change.outputs.version_changed == 'true' || github.event_name == 'workflow_dispatch' && inputs.dockerfile == 'Dockerfile'
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
@@ -40,26 +66,40 @@ jobs:
     with:
       image_name: headroom-mcp
       context: ./images/headroom-mcp
-      # 0.36.3 downstream carry: build-time patch for Cline OpenAI-compatible
-      # traffic to Bedrock. Revert to Dockerfile once the fixes land upstream.
-      # A push build always takes the carry; `inputs.dockerfile` is only
-      # populated for workflow_dispatch, which is how the base image gets built
-      # after a version bump (see images/headroom-mcp/CLINE_BEDROCK.md).
+      dockerfile: ./images/headroom-mcp/Dockerfile
+      config: images/headroom-mcp/image.yaml
+      version_arg: HEADROOM_VERSION
+      platforms: linux/amd64
+      smoke_command: __smoke
+      smoke_timeout: 120
+      scan: true
+      auto_increment_revision: true
+      publish: true
+
+  build-carry:
+    name: Build and publish Headroom MCP image (Cline Bedrock carry)
+    needs: [detect-version-change, build-base]
+    if: |
+      always() &&
+      (needs.detect-version-change.outputs.version_changed == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+    with:
+      image_name: headroom-mcp
+      context: ./images/headroom-mcp
+      # Downstream carry: build-time patch for Cline OpenAI-compatible
+      # traffic to Bedrock. When version changes, base Dockerfile builds first.
+      # For manual dispatch, user can choose which Dockerfile to build.
       dockerfile: ./images/headroom-mcp/${{ inputs.dockerfile || 'Dockerfile.cline-bedrock' }}
       config: images/headroom-mcp/image.yaml
       version_arg: HEADROOM_VERSION
       platforms: linux/amd64
       smoke_command: __smoke
-      # Measured on run 32311533470: ~7s proxy boot, ~1s health + dashboard, and
-      # ~5s for the first /v1/compress, which lazily loads the Kompress ONNX
-      # model out of the baked-in cache -- ~14s in total. That is precisely why
-      # the 15s default failed: the work fits, but not with container startup on
-      # top of it. The model load was never the slow part it was assumed to be.
-      #
-      # 120s is ~8x the measured cost. This is a ceiling, not a wait -- a healthy
-      # run still finishes in ~15s -- so the headroom is free, while still
-      # failing a genuinely hung smoke test in two minutes rather than ten.
       smoke_timeout: 120
       scan: true
-      auto_increment_revision: true
+      auto_increment_revision: false
       publish: true
