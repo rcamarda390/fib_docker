@@ -1,11 +1,11 @@
-# Cline 4.0.12 → Headroom 0.36.3 → AWS Bedrock
+# Cline 4.0.12 → Headroom 0.36.5 → AWS Bedrock
 
-This image carries a downstream Headroom 0.36.3 compatibility patch for Cline's
+This image carries a downstream Headroom 0.36.5 compatibility patch for Cline's
 OpenAI-compatible transport to AWS Bedrock.
 
 ## Request shaping
 
-Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.36.3 treats unknown
+Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.36.5 treats unknown
 OpenAI request keys as `extra_body`, and LiteLLM consequently forwards this key
 toward Bedrock, which rejects it. The downstream patch removes only
 `parallel_tool_calls` from `extra_body` when the configured Headroom provider is
@@ -57,7 +57,7 @@ The image enables Headroom's output shaper with:
 HEADROOM_OUTPUT_SHAPER=1
 ```
 
-Headroom 0.36.3 reads this setting live on each proxy request. No fixed
+Headroom 0.36.5 reads this setting live on each proxy request. No fixed
 `HEADROOM_VERBOSITY_LEVEL` is set.
 
 `headroom learn --verbosity --apply` remains a deployment-time operation because
@@ -65,7 +65,7 @@ it depends on agent session history.
 
 ## Health check in the air-gapped deployment
 
-The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.36.3's
+The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.36.5's
 external upstream readiness probe in the air-gapped Bedrock deployment. This
 does not weaken TLS verification for Bedrock traffic.
 
@@ -75,10 +75,10 @@ does not weaken TLS verification for Bedrock traffic.
 and applies the source patch during image build. Existing boto3/botocore,
 hardening, and pre-cached compression assets remain self-contained.
 
-The patch script expects exactly two Headroom 0.36.3 OpenAI call sites and fails
+The patch script expects exactly two Headroom 0.36.5 OpenAI call sites and fails
 the build if the upstream source shape changes. Both are still present and
-byte-identical at `v0.36.3`, and the regression suite below passes against a
-patched 0.36.3 install.
+byte-identical at `v0.36.5`, and the regression suite below passes against a
+patched 0.36.5 install.
 
 ## Upgrading Headroom while this carry exists
 
