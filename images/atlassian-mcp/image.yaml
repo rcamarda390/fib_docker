@@ -1,5 +1,5 @@
 name: atlassian-mcp
-upstream_version: 0.23.0
+upstream_version: 0.23.1
 revision: 12
 build_args: {}
 publish:
