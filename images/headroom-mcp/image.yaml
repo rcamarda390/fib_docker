@@ -5,7 +5,7 @@ upstream_version: 0.36.5
 # changes, and 0 + 1 lands on the same number if that reset ever misses).
 # Dockerfile.cline-bedrock pins its base image to the version line below, so
 # the tag the base build produces has to be predictable, not merely sequential.
-revision: 0
+revision: 1
 build_args:
   HEADROOM_COMMIT: 34a551756222b24ea4bc064f4250b8e7d169daf1
 publish:
