@@ -99,12 +99,13 @@ COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
 # The ensurepip bundled wheel carries the same vendored tree, so it goes too.
 # Nothing in this image invokes pip at runtime: gnosis-mcp has all deps from
 # requirements.lock pre-installed, and there is no entrypoint that needs pip.
-RUN rm -rf /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip \
-           /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip-*.dist-info \
-           /usr/local/lib/python${PYTHON_VERSION}/ensurepip/_bundled \
-           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip${PYTHON_VERSION} \
-           /root/.cache
-
+RUN rm -rf /usr/local/lib/python*/site-packages/pip \
+           /usr/local/lib/python*/site-packages/pip-*.dist-info \
+           /usr/local/lib/python*/ensurepip/_bundled \
+           /usr/lib/python*/dist-packages/pip* \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip* \
+           /usr/bin/pip /usr/bin/pip3 /usr/bin/pip* \
+           /root/.cache 2>/dev/null || true
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     GNOSIS_MCP_HOST=0.0.0.0 \
