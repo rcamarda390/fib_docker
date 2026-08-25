@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.14-alpine
+FROM python:3.16-alpine
 
 ARG ATLASSIAN_VERSION=0.23.0
 
@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN adduser -S -D -h /home/atlassian -s /sbin/nologin atlassian \
+    && pip install --no-cache-dir --upgrade setuptools \
     && pip install --no-cache-dir "mcp-atlassian==${ATLASSIAN_VERSION}" \
     && rm -rf /root/.cache
 
