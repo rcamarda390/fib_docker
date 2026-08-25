@@ -106,6 +106,7 @@ RUN rm -rf /usr/local/lib/python*/site-packages/pip \
            /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip* \
            /usr/bin/pip /usr/bin/pip3 /usr/bin/pip* \
            /root/.cache 2>/dev/null || true
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     GNOSIS_MCP_HOST=0.0.0.0 \
