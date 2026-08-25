@@ -1,4 +1,4 @@
-name: build-gnosis-mcp
+name: Build and publish Gnosis MCP image
 
 on:
   workflow_dispatch:
