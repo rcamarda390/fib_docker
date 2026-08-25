@@ -1,6 +1,6 @@
 name: gnosis-mcp
 upstream_version: 0.14.1
-revision: 5
+revision: 6
 build_args:
   EMBED_MODEL: "MongoDB/mdbr-leaf-ir"
   EXTRAS: "embeddings"
