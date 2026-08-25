@@ -30,11 +30,16 @@ RUN apt-get update \
 
 WORKDIR /build
 
-ARG GNOSIS_VERSION=0.14.0
+ARG GNOSIS_VERSION=0.14.1
 ARG EXTRAS="embeddings"
 COPY requirements.lock /build/requirements.lock
+# gnosis-mcp is locked to its PyPI release, so the extras are resolved away and
+# no longer appear in the requirement line. sqlite-vec is pulled in by the
+# embeddings extra alone, so it stands in as the marker that the lock really was
+# compiled with that extra.
 RUN test "$EXTRAS" = "embeddings" \
-    && grep -q "^gnosis-mcp\[embeddings\] @ " /build/requirements.lock \
+    && grep -qE "^gnosis-mcp==${GNOSIS_VERSION}( |$)" /build/requirements.lock \
+    && grep -qE "^sqlite-vec==" /build/requirements.lock \
     && pip install --require-hashes --prefix=/install -r /build/requirements.lock \
     && SITE_PACKAGES="$(find /install/lib -type d -name site-packages -print -quit)" \
     && test "$(PYTHONPATH="$SITE_PACKAGES" python -c 'import importlib.metadata; print(importlib.metadata.version("gnosis-mcp"))')" = "$GNOSIS_VERSION"
@@ -106,7 +111,7 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % __import__('os').environ['GNOSIS_MCP_PORT'])" || exit 1
 
-ARG GNOSIS_VERSION=0.14.0
+ARG GNOSIS_VERSION=0.14.1
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
 LABEL org.opencontainers.image.title="gnosis-mcp" \
       org.opencontainers.image.description="Self-hosted MCP docs server — air-gap variant, ONNX model pre-bundled." \
