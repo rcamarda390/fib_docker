@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.16-alpine
+FROM python:3.12-alpine
 
 ARG ATLASSIAN_VERSION=0.23.0
 
