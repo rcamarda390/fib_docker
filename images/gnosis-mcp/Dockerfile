@@ -89,11 +89,21 @@ RUN apt-get update \
 COPY --from=builder /install             /usr/local
 COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
 
-# Remove pip's vendored vulnerable setuptools and msgpack copies from the runtime:
+# Remove pip and its vendored vulnerable dependencies from the runtime.
 # CVE-2026-23949, CVE-2025-47273 (setuptools); CVE-2026-57585 (msgpack)
-# Since gnosis-mcp does not use pip at runtime, pip's vendor directory can be removed.
-RUN find /usr/local/lib/python*/site-packages/pip/_vendor -type d \
-        \( -name setuptools -o -name msgpack \) -exec rm -rf {} + 2>/dev/null || true
+# pip vendors its own dependency tree; pip's vendored pinned versions are:
+#   setuptools==70.3.0
+#   msgpack==1.1.2
+# Bumping PIP_VERSION cannot fix these because the vendored pins travel with
+# whatever pip release is installed; only removing pip removes the files.
+# The ensurepip bundled wheel carries the same vendored tree, so it goes too.
+# Nothing in this image invokes pip at runtime: gnosis-mcp has all deps from
+# requirements.lock pre-installed, and there is no entrypoint that needs pip.
+RUN rm -rf /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip \
+           /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip-*.dist-info \
+           /usr/local/lib/python${PYTHON_VERSION}/ensurepip/_bundled \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip${PYTHON_VERSION} \
+           /root/.cache
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -116,6 +126,11 @@ VOLUME ["/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % __import__('os').environ['GNOSIS_MCP_PORT'])" || exit 1
+
+# Verify that pip removal succeeded and didn't break runtime functionality.
+RUN ! command -v pip \
+    && ! python -c "import pip" 2>/dev/null \
+    && python -c "import gnosis_mcp; print(f'Verification: gnosis-mcp OK')"
 
 ARG GNOSIS_VERSION=0.14.1
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
