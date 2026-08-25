@@ -1,1 +1,5 @@
-gnosis-mcp[embeddings] @ https://github.com/nicholasglazer/gnosis-mcp/archive/ba0f191c505be774de71aa63b34b9a86fbb8a487.tar.gz
+# Pinned to the PyPI release rather than a GitHub source archive: GitHub
+# generates `archive/<sha>.tar.gz` on demand and does not guarantee the gzip
+# bytes are stable, so a --require-hashes install against one breaks without
+# warning when the archive is re-compressed. PyPI artifacts are immutable.
+gnosis-mcp[embeddings]==0.14.1
