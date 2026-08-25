@@ -195,7 +195,7 @@ fsspec==2026.7.0 \
     --hash=sha256:b57ddbafedfaef7018c1ecab32aa200a9d7ca26b77965f64e48b70061249d279 \
     --hash=sha256:c803c40f4cf860b49dea58ee3e1c33cb9c790520e233537e1340049f89b82a88
     # via huggingface-hub
-gnosis-mcp @ https://github.com/nicholasglazer/gnosis-mcp/archive/ba0f191c505be774de71aa63b34b9a86fbb8a487.tar.gz \
+gnosis-mcp[embeddings] @ https://github.com/nicholasglazer/gnosis-mcp/archive/ba0f191c505be774de71aa63b34b9a86fbb8a487.tar.gz \
     --hash=sha256:02bcdee8fc0e9d26feae0329ff10ad118c0b1bfb9426a9ad2f48399e5c534dda
     # via -r images/gnosis-mcp/requirements.in
 h11==0.16.0 \
