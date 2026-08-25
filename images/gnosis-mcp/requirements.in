@@ -3,3 +3,9 @@
 # bytes are stable, so a --require-hashes install against one breaks without
 # warning when the archive is re-compressed. PyPI artifacts are immutable.
 gnosis-mcp[embeddings]==0.14.1
+# Security fixes for transitive dependencies:
+# CVE-2026-23949: setuptools 70.3.0 → 80.10.0
+# CVE-2025-47273: setuptools 70.3.0 → 78.1.1+
+# CVE-2026-57585: msgpack 1.1.2 → 1.2.1
+setuptools>=80.10.0
+msgpack>=1.2.1

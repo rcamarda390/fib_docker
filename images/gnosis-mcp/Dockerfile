@@ -89,6 +89,12 @@ RUN apt-get update \
 COPY --from=builder /install             /usr/local
 COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
 
+# Remove pip's vendored vulnerable setuptools and msgpack copies from the runtime:
+# CVE-2026-23949, CVE-2025-47273 (setuptools); CVE-2026-57585 (msgpack)
+# Since gnosis-mcp does not use pip at runtime, pip's vendor directory can be removed.
+RUN find /usr/local/lib/python*/site-packages/pip/_vendor -type d \
+        \( -name setuptools -o -name msgpack \) -exec rm -rf {} + 2>/dev/null || true
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     GNOSIS_MCP_HOST=0.0.0.0 \
