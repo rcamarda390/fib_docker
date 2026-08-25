@@ -2,6 +2,9 @@ name: Build and publish Gnosis MCP image
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['images/gnosis-mcp/**']
 
 permissions:
   contents: write
