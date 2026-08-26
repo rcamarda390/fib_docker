@@ -32,7 +32,7 @@ RUN apk upgrade --no-cache \
               /usr/local/lib/python*/ensurepip/_bundled \
               /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip* \
               /root/.cache \
-    && ! command -v pip \
+    && test -z "$(find /usr/local/bin -maxdepth 1 -name 'pip*' -print -quit)" \
     && ! python -c "import pip" 2>/dev/null \
     && test -z "$(find /usr/local/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
     && test -z "$(find /usr/local/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
