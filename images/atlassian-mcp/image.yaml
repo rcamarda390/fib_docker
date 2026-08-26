@@ -2,8 +2,8 @@ name: atlassian-mcp
 upstream_version: 0.23.1
 revision: 15
 build_args:
-  ALPINE_VERSION: "3.23"
-  PYTHON_APK_VERSION: "3.12.14-r0"
+  ALPINE_VERSION: "3.24"
+  PYTHON_APK_VERSION: "3.14.7-r1"
 publish:
   ghcr: true
   dockerhub: true
