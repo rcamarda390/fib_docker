@@ -1,0 +1,5 @@
+#!/usr/bin/python3
+
+from mcp_atlassian import main
+
+main()

@@ -19,7 +19,7 @@ RUN apk upgrade --no-cache \
         --break-system-packages \
         --no-cache-dir \
         --no-compile \
-        --prefix=/opt/atlassian \
+        --target=/opt/atlassian/site-packages \
         "setuptools==${SETUPTOOLS_VERSION}" \
         "mcp-atlassian==${ATLASSIAN_VERSION}"
 
@@ -32,8 +32,7 @@ ARG SQLITE_MIN_VERSION=3.53.4-r0
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/opt/atlassian/lib/python3.12/site-packages \
-    PATH=/opt/atlassian/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PYTHONPATH=/opt/atlassian/site-packages
 
 # Use Alpine's packaged Python so scanners resolve the interpreter version
 # from authoritative APK metadata instead of fingerprinting the source-built
@@ -49,6 +48,7 @@ RUN apk upgrade --no-cache \
     && adduser -S -D -h /home/atlassian -s /sbin/nologin atlassian
 
 COPY --from=builder /opt/atlassian /opt/atlassian
+COPY --chmod=0555 mcp-atlassian /usr/local/bin/mcp-atlassian
 
 RUN apk info -e "python3=${PYTHON_APK_VERSION}" \
     && apk info -v python3 sqlite-libs \
