@@ -1,6 +1,6 @@
 name: atlassian-mcp
 upstream_version: 0.23.1
-revision: 13
+revision: 14
 build_args:
   PYTHON_VERSION: "3.12.14"
   ALPINE_VERSION: "3.23"
