@@ -45,6 +45,7 @@ RUN apk upgrade --no-cache \
         libstdc++ \
         "python3=${PYTHON_APK_VERSION}" \
         "sqlite-libs>=${SQLITE_MIN_VERSION}" \
+    && rm -rf /usr/lib/python3.12/ensurepip/_bundled \
     && adduser -S -D -h /home/atlassian -s /sbin/nologin atlassian
 
 COPY --from=builder /opt/atlassian /opt/atlassian
