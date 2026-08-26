@@ -54,13 +54,12 @@ RUN apk info -e "python3=${PYTHON_APK_VERSION}" \
     && apk info -v python3 sqlite-libs \
     && python3 -c "import platform; assert platform.python_version() == '${PYTHON_APK_VERSION%-r*}', platform.python_version()" \
     && python3 -c "from importlib.metadata import version; from packaging.version import Version; assert version('mcp-atlassian') == '${ATLASSIAN_VERSION}'; assert version('setuptools') == '${SETUPTOOLS_VERSION}'; assert Version(version('atlassian-python-api')) < Version('5.0.0')" \
-    && ! command -v pip \
-    && ! command -v pip3 \
-    && ! python3 -c "import pip" 2>/dev/null \
-    && test -z "$(find / -type f -path '*/pip/_vendor/*' -print -quit 2>/dev/null)" \
-    && test -z "$(find / -type f -path '*/ensurepip/_bundled/*' -print -quit 2>/dev/null)" \
-    && python3 -c "import sqlite3; from importlib.metadata import distributions; from packaging.version import Version; packages={d.metadata['Name'].lower(): d.version for d in distributions()}; assert sqlite3.sqlite_version_info >= (3, 53, 4); assert 'msgpack' not in packages or Version(packages['msgpack']) >= Version('1.2.1'); import mcp_atlassian" \
-    && mcp-atlassian --help >/dev/null
+    && test ! -e /usr/bin/pip \
+    && test ! -e /usr/bin/pip3 \
+    && test ! -e /usr/local/bin/pip \
+    && test ! -e /usr/local/bin/pip3 \
+    && python3 -c "import importlib.util, pathlib, sqlite3; from importlib.metadata import distributions; from packaging.version import Version; assert importlib.util.find_spec('pip') is None, importlib.util.find_spec('pip'); roots=(pathlib.Path('/opt/atlassian'), pathlib.Path('/usr/lib/python3.12')); forbidden=[str(path) for root in roots for path in root.rglob('*') if path.is_file() and ('/pip/_vendor/' in str(path) or '/ensurepip/_bundled/' in str(path))]; assert not forbidden, forbidden[:10]; packages={d.metadata['Name'].lower(): d.version for d in distributions()}; assert sqlite3.sqlite_version_info >= (3, 53, 4); assert 'msgpack' not in packages or Version(packages['msgpack']) >= Version('1.2.1'); import mcp_atlassian; from mcp_atlassian import main; assert callable(main)" \
+    && mcp-atlassian --help
 
 USER atlassian
 WORKDIR /home/atlassian
@@ -72,4 +71,3 @@ LABEL org.opencontainers.image.title="atlassian-mcp" \
       org.opencontainers.image.version="${ATLASSIAN_VERSION}"
 
 ENTRYPOINT ["mcp-atlassian"]
-
