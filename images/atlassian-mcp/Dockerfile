@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG PYTHON_VERSION=3.12.14
+ARG PYTHON_VERSION=3.13.15
 ARG ALPINE_VERSION=3.23
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION}
 
@@ -13,17 +13,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-# Security remediation for the 0.23.0-v12 Xray findings:
+# Security remediation:
+# - Python 3.13.15 is the latest stable 3.13 maintenance release and satisfies
+#   the fixed 3.13 floors in the Xray findings attributed to Python 3.12.12.
 # - mcp-atlassian 0.23.1 fixes GHSA-5j8j-256g-vvp5 / XRAY-1057010.
-# - Python 3.12.14 avoids the Python 3.14.7 findings while staying on a
-#   supported stable interpreter accepted by upstream (Python >=3.10).
 # - Alpine 3.23 supplies the fixed sqlite-libs 3.53.4-r0 package.
 # - pip and ensurepip are build tooling only; remove their vendored setuptools
-#   70.3.0 and msgpack 1.1.2 trees from the runtime after installation.
+#   and msgpack trees from the runtime after installation.
 RUN apk upgrade --no-cache \
     && apk add --no-cache "sqlite-libs>=${SQLITE_MIN_VERSION}" \
     && apk info -v sqlite-libs \
     && adduser -S -D -h /home/atlassian -s /sbin/nologin atlassian \
+    && python -c "import platform; assert platform.python_version() == '${PYTHON_VERSION}', platform.python_version()" \
     && pip install "setuptools==${SETUPTOOLS_VERSION}" \
     && pip install "mcp-atlassian==${ATLASSIAN_VERSION}" \
     && python -c "from importlib.metadata import version; from packaging.version import Version; assert version('mcp-atlassian') == '${ATLASSIAN_VERSION}'; assert version('setuptools') == '${SETUPTOOLS_VERSION}'; assert Version(version('atlassian-python-api')) < Version('5.0.0')" \
