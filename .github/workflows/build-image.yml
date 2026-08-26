@@ -83,6 +83,13 @@ on:
         required: false
         default: false
         type: boolean
+      # Derive a unique revision from this workflow's monotonically increasing
+      # run number. The configured revision acts as a stable floor, so the file
+      # does not need a follow-up bookkeeping commit after publication.
+      revision_from_run_number:
+        required: false
+        default: false
+        type: boolean
     outputs:
       image_tag:
         description: Versioned image tag
@@ -198,6 +205,29 @@ jobs:
           sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
           echo "next_revision=$next_revision" >> "$GITHUB_OUTPUT"
           echo "Building revision $next_revision (previous published revision: $current_revision)"
+
+      # Publish a fresh immutable tag in one action without opening a
+      # revision-bump PR. The configured revision is a floor and the calling
+      # workflow's monotonically increasing run number guarantees uniqueness.
+      - name: Compute the run-scoped image revision
+        if: inputs.revision_from_run_number && inputs.publish && (inputs.publish_ghcr || inputs.publish_dockerhub) && github.event_name != 'pull_request'
+        env:
+          CONFIG: ${{ inputs.config }}
+          RUN_NUMBER: ${{ github.run_number }}
+          AUTO_INCREMENT: ${{ inputs.auto_increment_revision }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$AUTO_INCREMENT" = "true" ]; then
+            echo "::error::revision_from_run_number and auto_increment_revision are mutually exclusive"
+            exit 1
+          fi
+          revision_count=$(grep -Ec '^revision:[[:space:]]*[0-9]+[[:space:]]*$' "$CONFIG")
+          test "$revision_count" -eq 1
+          base_revision=$(sed -nE 's/^revision:[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' "$CONFIG")
+          run_revision=$((base_revision + RUN_NUMBER))
+          sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $run_revision/" "$CONFIG"
+          echo "Building run-scoped revision $run_revision (configured floor: $base_revision; workflow run: $RUN_NUMBER)"
 
       - name: Read image metadata
         id: meta
