@@ -1,43 +1,65 @@
 # syntax=docker/dockerfile:1.7
 
-ARG PYTHON_VERSION=3.13.15
 ARG ALPINE_VERSION=3.23
-FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION}
+ARG PYTHON_APK_VERSION=3.12.14-r0
 
+# Install Python dependencies outside the runtime image. The application tree
+# is copied below, while pip and its vendored packages remain in this stage.
+FROM alpine:${ALPINE_VERSION} AS builder
+
+ARG PYTHON_APK_VERSION
+ARG ATLASSIAN_VERSION=0.23.1
+ARG SETUPTOOLS_VERSION=84.0.0
+
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
+        "python3=${PYTHON_APK_VERSION}" \
+        py3-pip \
+    && python3 -m pip install \
+        --break-system-packages \
+        --no-cache-dir \
+        --no-compile \
+        --prefix=/opt/atlassian \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "mcp-atlassian==${ATLASSIAN_VERSION}"
+
+FROM alpine:${ALPINE_VERSION}
+
+ARG PYTHON_APK_VERSION
 ARG ATLASSIAN_VERSION=0.23.1
 ARG SETUPTOOLS_VERSION=84.0.0
 ARG SQLITE_MIN_VERSION=3.53.4-r0
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+    PYTHONPATH=/opt/atlassian/lib/python3.12/site-packages \
+    PATH=/opt/atlassian/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Security remediation:
-# - Python 3.13.15 is the latest stable 3.13 maintenance release and satisfies
-#   the fixed 3.13 floors in the Xray findings attributed to Python 3.12.12.
-# - mcp-atlassian 0.23.1 fixes GHSA-5j8j-256g-vvp5 / XRAY-1057010.
-# - Alpine 3.23 supplies the fixed sqlite-libs 3.53.4-r0 package.
-# - pip and ensurepip are build tooling only; remove their vendored setuptools
-#   and msgpack trees from the runtime after installation.
+# Use Alpine's packaged Python so scanners resolve the interpreter version
+# from authoritative APK metadata instead of fingerprinting the source-built
+# interpreter in the Docker Official Image. Pip and ensurepip are absent from
+# this runtime stage by construction.
 RUN apk upgrade --no-cache \
-    && apk add --no-cache "sqlite-libs>=${SQLITE_MIN_VERSION}" \
-    && apk info -v sqlite-libs \
-    && adduser -S -D -h /home/atlassian -s /sbin/nologin atlassian \
-    && python -c "import platform; assert platform.python_version() == '${PYTHON_VERSION}', platform.python_version()" \
-    && pip install "setuptools==${SETUPTOOLS_VERSION}" \
-    && pip install "mcp-atlassian==${ATLASSIAN_VERSION}" \
-    && python -c "from importlib.metadata import version; from packaging.version import Version; assert version('mcp-atlassian') == '${ATLASSIAN_VERSION}'; assert version('setuptools') == '${SETUPTOOLS_VERSION}'; assert Version(version('atlassian-python-api')) < Version('5.0.0')" \
-    && rm -rf /usr/local/lib/python*/site-packages/pip \
-              /usr/local/lib/python*/site-packages/pip-*.dist-info \
-              /usr/local/lib/python*/ensurepip/_bundled \
-              /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip* \
-              /root/.cache \
-    && test -z "$(find /usr/local/bin -maxdepth 1 -name 'pip*' -print -quit)" \
-    && ! python -c "import pip" 2>/dev/null \
-    && test -z "$(find /usr/local/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
-    && test -z "$(find /usr/local/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
-    && python -c "import sqlite3; from importlib.metadata import distributions; from packaging.version import Version; packages={d.metadata['Name'].lower(): d.version for d in distributions()}; assert sqlite3.sqlite_version_info >= (3, 53, 4); assert 'msgpack' not in packages or Version(packages['msgpack']) >= Version('1.2.1'); import mcp_atlassian" \
+    && apk add --no-cache \
+        ca-certificates \
+        libgcc \
+        libstdc++ \
+        "python3=${PYTHON_APK_VERSION}" \
+        "sqlite-libs>=${SQLITE_MIN_VERSION}" \
+    && adduser -S -D -h /home/atlassian -s /sbin/nologin atlassian
+
+COPY --from=builder /opt/atlassian /opt/atlassian
+
+RUN apk info -e "python3=${PYTHON_APK_VERSION}" \
+    && apk info -v python3 sqlite-libs \
+    && python3 -c "import platform; assert platform.python_version() == '${PYTHON_APK_VERSION%-r*}', platform.python_version()" \
+    && python3 -c "from importlib.metadata import version; from packaging.version import Version; assert version('mcp-atlassian') == '${ATLASSIAN_VERSION}'; assert version('setuptools') == '${SETUPTOOLS_VERSION}'; assert Version(version('atlassian-python-api')) < Version('5.0.0')" \
+    && ! command -v pip \
+    && ! command -v pip3 \
+    && ! python3 -c "import pip" 2>/dev/null \
+    && test -z "$(find / -type f -path '*/pip/_vendor/*' -print -quit 2>/dev/null)" \
+    && test -z "$(find / -type f -path '*/ensurepip/_bundled/*' -print -quit 2>/dev/null)" \
+    && python3 -c "import sqlite3; from importlib.metadata import distributions; from packaging.version import Version; packages={d.metadata['Name'].lower(): d.version for d in distributions()}; assert sqlite3.sqlite_version_info >= (3, 53, 4); assert 'msgpack' not in packages or Version(packages['msgpack']) >= Version('1.2.1'); import mcp_atlassian" \
     && mcp-atlassian --help >/dev/null
 
 USER atlassian
@@ -50,3 +72,4 @@ LABEL org.opencontainers.image.title="atlassian-mcp" \
       org.opencontainers.image.version="${ATLASSIAN_VERSION}"
 
 ENTRYPOINT ["mcp-atlassian"]
+
