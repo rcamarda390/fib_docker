@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v9)
+# gnosis-mcp — air-gap variant (v10)
 # =============================================================================
 # Patch: gnosis-mcp 0.14.0 rest.py does not wire session_manager.run() into
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
@@ -76,9 +76,26 @@ RUN set -e; \
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
+# Xray's fixed floor for CVE-2026-63072, CVE-2026-54874,
+# CVE-2026-18798, CVE-2026-63076, CVE-2026-63075, CVE-2026-14457,
+# CVE-2026-14456, CVE-2026-63074, CVE-2026-63073, and CVE-2026-75803.
+# Keep this as a minimum rather than an exact pin so later Debian security
+# revisions remain eligible. The build fails closed if the mirror is stale.
+ARG OPENSSL_MIN_VERSION=3.5.7-1~deb13u2
+
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get install -y --no-install-recommends \
+        libgomp1 \
+        libssl3t64 \
+        openssl \
+        openssl-provider-legacy \
+    && for package in libssl3t64 openssl openssl-provider-legacy; do \
+        installed_version="$(dpkg-query -W -f='${Version}' "$package")"; \
+        echo "$package=$installed_version"; \
+        dpkg --compare-versions "$installed_version" ge "$OPENSSL_MIN_VERSION" \
+            || { echo "$package is below required version $OPENSSL_MIN_VERSION" >&2; exit 1; }; \
+       done \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
     && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
     && rm -rf /var/lib/apt/lists/* \
@@ -132,6 +149,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 # Verify that pip removal succeeded and didn't break runtime functionality.
 RUN ! command -v pip \
     && ! python -c "import pip" 2>/dev/null \
+    && test -z "$(find /usr/local /usr/lib -type f \\( \
+        -path '*/pip/_vendor/*' -o -path '*/ensurepip/_bundled/*' \\) -print -quit)" \
+    && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1')" \
     && python -c "import gnosis_mcp; print(f'Verification: gnosis-mcp OK')"
 
 ARG GNOSIS_VERSION=0.14.1
@@ -144,7 +164,7 @@ LABEL org.opencontainers.image.title="gnosis-mcp" \
       gnosis.embed-model="${EMBED_MODEL}" \
       gnosis.gnosis-version="${GNOSIS_VERSION}" \
       gnosis.patch="rest.py-combined-lifespan" \
-      gnosis.image-version="v9"
+      gnosis.image-version="v10"
 
 ENTRYPOINT ["gnosis-mcp"]
 CMD ["serve", "--transport", "streamable-http", "--rest"]
