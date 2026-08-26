@@ -10,8 +10,12 @@ on:
       - .github/workflows/build-atlassian-mcp.yml
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  # Required by the reusable workflow contract. Atlassian's run-number mode
+  # does not exercise the revision-PR step, but called workflows cannot request
+  # a broader token scope than their caller grants.
+  pull-requests: write
 
 jobs:
   build:
@@ -19,8 +23,9 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: read
+      contents: write
       packages: write
+      pull-requests: write
     with:
       image_name: atlassian-mcp
       context: ./images/atlassian-mcp
