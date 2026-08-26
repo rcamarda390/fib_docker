@@ -10,12 +10,8 @@ on:
       - .github/workflows/build-atlassian-mcp.yml
 
 permissions:
-  contents: write
+  contents: read
   packages: write
-  # The shared workflow proposes the revision bump as a PR, because
-  # the base branch rejects direct pushes. A reusable workflow runs
-  # with the calling job's token scope, so the grant must be here.
-  pull-requests: write
 
 jobs:
   build:
@@ -23,9 +19,8 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: write
+      contents: read
       packages: write
-      pull-requests: write
     with:
       image_name: atlassian-mcp
       context: ./images/atlassian-mcp
@@ -35,5 +30,8 @@ jobs:
       platforms: linux/amd64
       smoke_command: --help
       scan: true
-      auto_increment_revision: true
+      # Publish a fresh immutable revision in this same run. The shared workflow
+      # combines image.yaml's revision floor with this workflow's monotonic run
+      # number, so no follow-up version-bump PR is needed.
+      revision_from_run_number: true
       publish: ${{ github.event_name != 'pull_request' }}
