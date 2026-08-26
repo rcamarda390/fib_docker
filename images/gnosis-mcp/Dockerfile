@@ -149,8 +149,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 # Verify that pip removal succeeded and didn't break runtime functionality.
 RUN ! command -v pip \
     && ! python -c "import pip" 2>/dev/null \
-    && test -z "$(find /usr/local /usr/lib -type f \\( \
-        -path '*/pip/_vendor/*' -o -path '*/ensurepip/_bundled/*' \\) -print -quit)" \
+    && test -z "$(find /usr/local /usr/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
+    && test -z "$(find /usr/local /usr/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
     && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1')" \
     && python -c "import gnosis_mcp; print(f'Verification: gnosis-mcp OK')"
 
