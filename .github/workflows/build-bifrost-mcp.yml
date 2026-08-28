@@ -3,6 +3,11 @@ name: Build and publish Bifrost MCP image
 on:
   workflow_dispatch:
 
+# Serialize publications so two dispatches cannot calculate the same next tag.
+concurrency:
+  group: bifrost-mcp-publish
+  cancel-in-progress: false
+
 permissions:
   # Required by the reusable workflow contract. Run-number revision mode does
   # not exercise the revision-PR step, but a caller cannot grant less than the
@@ -31,7 +36,7 @@ jobs:
       run_smoke_test: false
       smoke_healthcheck: true
       scan: true
-      # Use the run number to mint a fresh immutable revision in this same
-      # build/publish action; no follow-up revision PR or second build is needed.
-      revision_from_run_number: true
+      # Count tags already published for this upstream version. Failed builds
+      # publish no tag, so they do not consume a revision.
+      revision_from_published_tag_count: true
       publish: ${{ github.event_name != 'pull_request' }}
