@@ -9,8 +9,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  # Required by the reusable workflow contract. Run-number revision mode does
-  # not exercise the revision-PR step, but a caller cannot grant less than the
+  # Required by the reusable workflow contract. Published-tag revision mode
+  # does not exercise the revision-PR step, but a caller cannot grant less than
   # permissions declared by the called workflow.
   contents: write
   packages: write
