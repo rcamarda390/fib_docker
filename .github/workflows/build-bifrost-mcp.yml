@@ -31,5 +31,7 @@ jobs:
       run_smoke_test: false
       smoke_healthcheck: true
       scan: true
-      auto_increment_revision: true
+      # Use the run number to mint a fresh immutable revision in this same
+      # build/publish action; no follow-up revision PR or second build is needed.
+      revision_from_run_number: true
       publish: ${{ github.event_name != 'pull_request' }}
