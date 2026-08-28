@@ -259,10 +259,12 @@ jobs:
           url="https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${INPUT_IMAGE_NAME}/tags?page_size=100&name=${version}-v"
           while [ -n "$url" ] && [ "$url" != "null" ]; do
             response=$(curl --fail --silent --show-error --retry 3 --retry-all-errors "$url")
-            jq -r '.results[].name' <<<"$response" >> "$tags_file"
+            jq -r --arg prefix "${version}-v" \
+              '.results[].name | select(startswith($prefix)) | select((ltrimstr($prefix) | test("^[0-9]+$")))' \
+              <<<"$response" >> "$tags_file"
             url=$(jq -r '.next // empty' <<<"$response")
           done
-          published_count=$(grep -Ec "^${version}-v[0-9]+$" "$tags_file" || true)
+          published_count=$(sort -u "$tags_file" | grep -c . || true)
           next_revision=$((published_count + 1))
           candidate="${version}-v${next_revision}"
           if grep -Fxq "$candidate" "$tags_file"; then
