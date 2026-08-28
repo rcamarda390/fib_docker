@@ -1,16 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
-ARG BIFROST_VERSION=1.6.11
-ARG BIFROST_COMMIT=0a8a38c983b7b932a3f7b4e85adeac08ad99b497
+ARG BIFROST_VERSION=2.0.0
+ARG BIFROST_COMMIT=e4a30d6041c0446603aea615bc5da340dac001b1
 
-# Go toolchain the gateway binary is compiled with. Xray reads it out of the
-# binary's build info and reports it as the `github.com/golang/go` component, so
-# the compiler version is itself a scanned dependency: go1.26.5 is flagged for
-# CVE-2026-39821 (9.6), CVE-2026-56865 (8.4) and seven more. go1.26.6 is the
-# fix release on the 1.26 line.
-ARG GO_VERSION=1.26.6
+# Go toolchain the gateway binary is compiled with. Bifrost v2.0.0 declares
+# go 1.27.0 in transports/go.mod and upstream builds with this exact toolchain.
+# Xray also reads the compiler version from the binary's build info, so keep
+# the toolchain pinned and verified as part of the image supply chain.
+ARG GO_VERSION=1.27.0
 
-# Module versions that clear the Xray findings against upstream v1.6.11's
+# Module versions that clear the Xray findings against upstream v2.0.0's
 # transports/go.mod:
 #   x/text v0.37.0            CVE-2026-56852 (7.5), fixed in v0.39.0; v0.40.0
 #                             is the version go-openapi/validate v0.26.1
@@ -42,7 +41,7 @@ ARG GO_OPENAPI_SPEC_VERSION=v0.22.9
 ARG GO_OPENAPI_SWAG_VERSION=v0.27.3
 ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
 
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
+FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS source
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 RUN apk upgrade --no-cache \
@@ -59,7 +58,7 @@ RUN npm ci
 COPY --from=source /src/ui/ ./
 RUN npm run build-enterprise
 
-FROM golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS builder
+FROM golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS builder
 ARG GO_VERSION
 WORKDIR /app
 # The digest is what actually selects the image, so confirm it still carries the
@@ -126,7 +125,7 @@ RUN go build \
 # if the build somehow ran on a toolchain other than the pinned one.
 RUN go version -m /app/main | grep -qwF "go${GO_VERSION}"
 
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 ARG BIFROST_VERSION
 ARG BIFROST_COMMIT
 WORKDIR /app
