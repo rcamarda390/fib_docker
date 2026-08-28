@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # Required by the reusable workflow contract. Run-number revision mode does
+  # not exercise the revision-PR step, but a caller cannot grant less than the
+  # permissions declared by the called workflow.
+  contents: write
   packages: write
+  pull-requests: write
 
 jobs:
   build:
@@ -13,8 +17,9 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: read
+      contents: write
       packages: write
+      pull-requests: write
     with:
       image_name: bifrost-mcp
       context: ./images/bifrost-mcp
