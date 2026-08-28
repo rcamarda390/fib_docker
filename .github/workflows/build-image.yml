@@ -90,6 +90,13 @@ on:
         required: false
         default: false
         type: boolean
+      # Derive the next revision from the number of tags already published for
+      # this exact upstream version. Failed builds publish no tag and therefore
+      # do not consume a revision.
+      revision_from_published_tag_count:
+        required: false
+        default: false
+        type: boolean
     outputs:
       image_tag:
         description: Versioned image tag
@@ -228,6 +235,42 @@ jobs:
           run_revision=$((base_revision + RUN_NUMBER))
           sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $run_revision/" "$CONFIG"
           echo "Building run-scoped revision $run_revision (configured floor: $base_revision; workflow run: $RUN_NUMBER)"
+
+      - name: Compute revision from successful publications
+        if: inputs.revision_from_published_tag_count && inputs.publish && inputs.publish_dockerhub && github.event_name != 'pull_request'
+        env:
+          CONFIG: ${{ inputs.config }}
+          INPUT_IMAGE_NAME: ${{ inputs.image_name }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          AUTO_INCREMENT: ${{ inputs.auto_increment_revision }}
+          RUN_NUMBER_REVISION: ${{ inputs.revision_from_run_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$AUTO_INCREMENT" = "true" ] || [ "$RUN_NUMBER_REVISION" = "true" ]; then
+            echo "::error::revision_from_published_tag_count is mutually exclusive with the other revision modes"
+            exit 1
+          fi
+          test -n "$DOCKERHUB_USERNAME"
+          version=$(sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' "$CONFIG")
+          test -n "$version"
+          tags_file=$(mktemp)
+          trap 'rm -f "$tags_file"' EXIT
+          url="https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${INPUT_IMAGE_NAME}/tags?page_size=100&name=${version}-v"
+          while [ -n "$url" ] && [ "$url" != "null" ]; do
+            response=$(curl --fail --silent --show-error --retry 3 --retry-all-errors "$url")
+            jq -r '.results[].name' <<<"$response" >> "$tags_file"
+            url=$(jq -r '.next // empty' <<<"$response")
+          done
+          published_count=$(grep -Ec "^${version}-v[0-9]+$" "$tags_file" || true)
+          next_revision=$((published_count + 1))
+          candidate="${version}-v${next_revision}"
+          if grep -Fxq "$candidate" "$tags_file"; then
+            echo "::error::Computed tag $candidate already exists; refusing to overwrite an immutable image"
+            exit 1
+          fi
+          sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
+          echo "Building $candidate after $published_count successful publication(s) for upstream $version"
 
       - name: Read image metadata
         id: meta
