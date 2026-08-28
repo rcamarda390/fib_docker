@@ -4,12 +4,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   packages: write
-  # The shared workflow proposes the revision bump as a PR, because
-  # the base branch rejects direct pushes. A reusable workflow runs
-  # with the calling job's token scope, so the grant must be here.
-  pull-requests: write
 
 jobs:
   build:
@@ -17,9 +13,8 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
     permissions:
-      contents: write
+      contents: read
       packages: write
-      pull-requests: write
     with:
       image_name: bifrost-mcp
       context: ./images/bifrost-mcp
@@ -31,5 +26,7 @@ jobs:
       run_smoke_test: false
       smoke_healthcheck: true
       scan: true
-      auto_increment_revision: true
+      # Use the run number to mint a fresh immutable revision in this same
+      # build/publish action; no follow-up revision PR or second build is needed.
+      revision_from_run_number: true
       publish: ${{ github.event_name != 'pull_request' }}

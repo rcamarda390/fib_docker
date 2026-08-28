@@ -40,6 +40,9 @@ ARG GO_GIT_VERSION=v5.19.2
 ARG GO_OPENAPI_SPEC_VERSION=v0.22.9
 ARG GO_OPENAPI_SWAG_VERSION=v0.27.3
 ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
+# gRPC v1.82.1 is reported by Xray as XRAY-1057286 (High, CWE-400)
+# and XRAY-1057284 (Medium, CWE-863); both are fixed in v1.83.1.
+ARG GO_GRPC_VERSION=v1.83.1
 
 FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS source
 ARG BIFROST_VERSION
@@ -86,6 +89,7 @@ ARG GO_GIT_VERSION
 ARG GO_OPENAPI_SPEC_VERSION
 ARG GO_OPENAPI_SWAG_VERSION
 ARG GO_OPENAPI_VALIDATE_VERSION
+ARG GO_GRPC_VERSION
 RUN set -eu; \
     GOFLAGS=-mod=mod go get \
       "golang.org/x/text@${GO_TEXT_VERSION}" \
@@ -94,7 +98,8 @@ RUN set -eu; \
       "github.com/go-openapi/spec@${GO_OPENAPI_SPEC_VERSION}" \
       "github.com/go-openapi/swag/jsonutils@${GO_OPENAPI_SWAG_VERSION}" \
       "github.com/go-openapi/swag/yamlutils@${GO_OPENAPI_SWAG_VERSION}" \
-      "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}"; \
+      "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}" \
+      "google.golang.org/grpc@${GO_GRPC_VERSION}"; \
     for pin in \
       "golang.org/x/text=${GO_TEXT_VERSION}" \
       "golang.org/x/net=${GO_NET_VERSION}" \
@@ -102,7 +107,8 @@ RUN set -eu; \
       "github.com/go-openapi/spec=${GO_OPENAPI_SPEC_VERSION}" \
       "github.com/go-openapi/swag/jsonutils=${GO_OPENAPI_SWAG_VERSION}" \
       "github.com/go-openapi/swag/yamlutils=${GO_OPENAPI_SWAG_VERSION}" \
-      "github.com/go-openapi/validate=${GO_OPENAPI_VALIDATE_VERSION}"; \
+      "github.com/go-openapi/validate=${GO_OPENAPI_VALIDATE_VERSION}" \
+      "google.golang.org/grpc=${GO_GRPC_VERSION}"; \
     do \
       module="${pin%=*}"; expected="${pin##*=}"; \
       resolved="$(go list -m -f '{{.Version}}' "$module")"; \
