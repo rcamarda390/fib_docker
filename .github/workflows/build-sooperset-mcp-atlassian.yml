@@ -2,6 +2,16 @@ name: Build and publish sooperset-mcp-atlassian image
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - images/sooperset-mcp-atlassian/**
+      - .github/workflows/build-sooperset-mcp-atlassian.yml
+
+concurrency:
+  group: sooperset-mcp-atlassian-publish
+  cancel-in-progress: false
 
 permissions:
   contents: write
