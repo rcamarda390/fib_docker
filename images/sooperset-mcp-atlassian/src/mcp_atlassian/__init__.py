@@ -157,6 +157,25 @@ async def _run_stdio_with_stdin_guard(run_kwargs: dict[str, object]) -> None:
     help="Path for Streamable HTTP transport (e.g., /mcp).",
 )
 @click.option(
+    "--confluence-url",
+    help="Confluence URL (e.g., https://your-domain.atlassian.net/wiki)",
+)
+@click.option("--confluence-username", help="Confluence username/email")
+@click.option("--confluence-token", help="Confluence API token")
+@click.option(
+    "--confluence-personal-token",
+    help="Confluence Personal Access Token (for Confluence Server/Data Center)",
+)
+@click.option(
+    "--confluence-ssl-verify/--no-confluence-ssl-verify",
+    default=True,
+    help="Verify SSL certificates for Confluence Server/Data Center (default: verify)",
+)
+@click.option(
+    "--confluence-spaces-filter",
+    help="Comma-separated list of Confluence space keys to filter search results",
+)
+@click.option(
     "--jira-url",
     help="Jira URL (e.g., https://your-domain.atlassian.net or https://jira.your-company.com)",
 )
@@ -222,6 +241,12 @@ def main(
     port: int,
     host: str,
     path: str | None,
+    confluence_url: str | None,
+    confluence_username: str | None,
+    confluence_token: str | None,
+    confluence_personal_token: str | None,
+    confluence_ssl_verify: bool,
+    confluence_spaces_filter: str | None,
     jira_url: str | None,
     jira_username: str | None,
     jira_token: str | None,
@@ -350,6 +375,14 @@ def main(
         os.environ["ENABLED_TOOLS"] = enabled_tools
     if click_ctx and was_option_provided(click_ctx, "toolsets"):
         os.environ["TOOLSETS"] = toolsets
+    if click_ctx and was_option_provided(click_ctx, "confluence_url"):
+        os.environ["CONFLUENCE_URL"] = confluence_url
+    if click_ctx and was_option_provided(click_ctx, "confluence_username"):
+        os.environ["CONFLUENCE_USERNAME"] = confluence_username
+    if click_ctx and was_option_provided(click_ctx, "confluence_token"):
+        os.environ["CONFLUENCE_API_TOKEN"] = confluence_token
+    if click_ctx and was_option_provided(click_ctx, "confluence_personal_token"):
+        os.environ["CONFLUENCE_PERSONAL_TOKEN"] = confluence_personal_token
     if click_ctx and was_option_provided(click_ctx, "jira_url"):
         os.environ["JIRA_URL"] = jira_url
     if click_ctx and was_option_provided(click_ctx, "jira_username"):
@@ -372,6 +405,10 @@ def main(
         os.environ["ATLASSIAN_OAUTH_ACCESS_TOKEN"] = oauth_access_token
     if click_ctx and was_option_provided(click_ctx, "read_only"):
         os.environ["READ_ONLY_MODE"] = str(read_only).lower()
+    if click_ctx and was_option_provided(click_ctx, "confluence_ssl_verify"):
+        os.environ["CONFLUENCE_SSL_VERIFY"] = str(confluence_ssl_verify).lower()
+    if click_ctx and was_option_provided(click_ctx, "confluence_spaces_filter"):
+        os.environ["CONFLUENCE_SPACES_FILTER"] = confluence_spaces_filter
     if click_ctx and was_option_provided(click_ctx, "jira_ssl_verify"):
         os.environ["JIRA_SSL_VERIFY"] = str(jira_ssl_verify).lower()
     if click_ctx and was_option_provided(click_ctx, "jira_projects_filter"):
