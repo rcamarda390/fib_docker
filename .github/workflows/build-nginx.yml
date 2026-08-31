@@ -10,6 +10,7 @@ on:
       - ".github/workflows/build-nginx.yml"
 
 # Serialize publications so two runs cannot calculate the same next tag.
+# First publication is valid even before the Docker Hub repository exists.
 concurrency:
   group: nginx-publish
   cancel-in-progress: false
