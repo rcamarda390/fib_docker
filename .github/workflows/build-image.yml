@@ -258,7 +258,22 @@ jobs:
           trap 'rm -f "$tags_file"' EXIT
           url="https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${INPUT_IMAGE_NAME}/tags?page_size=100&name=${version}-v"
           while [ -n "$url" ] && [ "$url" != "null" ]; do
-            response=$(curl --fail --silent --show-error --retry 3 --retry-all-errors "$url")
+            response_file=$(mktemp)
+            http_code=$(curl --silent --show-error --retry 3 --retry-all-errors \
+              --output "$response_file" --write-out '%{http_code}' "$url")
+            if [ "$http_code" = "404" ]; then
+              echo "Docker Hub repository does not exist yet; treating this as the first publication."
+              rm -f "$response_file"
+              break
+            fi
+            if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+              echo "::error::Docker Hub tag lookup failed with HTTP $http_code"
+              cat "$response_file" >&2 || true
+              rm -f "$response_file"
+              exit 1
+            fi
+            response=$(cat "$response_file")
+            rm -f "$response_file"
             jq -r --arg prefix "${version}-v" \
               '.results[].name | select(startswith($prefix)) | select((ltrimstr($prefix) | test("^[0-9]+$")))' \
               <<<"$response" >> "$tags_file"
