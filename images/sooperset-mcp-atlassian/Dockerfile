@@ -21,6 +21,17 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
+# Xray flagged this image running Python 3.13.10 even though PYTHON_IMAGE
+# above already pins 3.13.15 -- uv's default python-preference is "managed",
+# so `uv sync` can silently ignore the base image's system interpreter and
+# provision its own downloaded CPython build instead, decoupling the venv's
+# actual Python (and its bundled ensurepip/setuptools) from PYTHON_IMAGE
+# entirely. Forcing only-system makes PYTHON_IMAGE the single source of
+# truth in practice, not just in the ARG name, and turns any future mismatch
+# into a build failure instead of a silent version regression.
+ENV UV_PYTHON_PREFERENCE=only-system
+ENV UV_PYTHON_DOWNLOADS=never
+
 # Allow injecting the package version at build time so that the image
 # reports the correct version even without a .git directory.
 ARG VERSION
@@ -61,7 +72,7 @@ FROM ${PYTHON_IMAGE}
 # this image never runs pip/ensurepip at runtime -- it only runs the
 # pre-built venv copied in below.
 RUN apk update && apk upgrade --no-cache && \
-    rm -rf /usr/local/lib/python3.13/ensurepip && \
+    rm -rf /usr/local/lib/python3.*/ensurepip && \
     rm -rf /var/cache/apk/*
 
 # Create a non-root user 'app'
