@@ -1,0 +1,38 @@
+name: Build and publish NGINX image
+
+on:
+  workflow_dispatch:
+
+# Serialize publications so two dispatches cannot calculate the same next tag.
+concurrency:
+  group: nginx-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build and publish NGINX image
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+    with:
+      image_name: nginx
+      context: ./images/nginx
+      dockerfile: ./images/nginx/Dockerfile
+      config: images/nginx/image.yaml
+      version_arg: NGINX_VERSION
+      platforms: linux/amd64
+      run_smoke_test: false
+      smoke_healthcheck: true
+      smoke_healthcheck_port: 80
+      smoke_healthcheck_path: /
+      scan: true
+      revision_from_published_tag_count: true
+      publish: ${{ github.event_name != 'pull_request' }}
