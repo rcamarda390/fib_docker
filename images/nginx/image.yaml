@@ -1,0 +1,9 @@
+name: nginx
+upstream_version: 1.31.4
+revision: 1
+build_args:
+  NGINX_COMMIT: "39ffdd8ece695aeb3874c7d3eaf863dc64e82482"
+publish:
+  ghcr: true
+  dockerhub: true
+  latest: false
