@@ -2,8 +2,14 @@ name: Build and publish NGINX image
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "images/nginx/**"
+      - ".github/workflows/build-nginx.yml"
 
-# Serialize publications so two dispatches cannot calculate the same next tag.
+# Serialize publications so two runs cannot calculate the same next tag.
 concurrency:
   group: nginx-publish
   cancel-in-progress: false
