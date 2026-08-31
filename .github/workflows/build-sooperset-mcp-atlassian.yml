@@ -39,5 +39,6 @@ jobs:
       platforms: linux/amd64
       smoke_command: --help
       scan: true
+      block_on_scan_failure: true
       auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}
