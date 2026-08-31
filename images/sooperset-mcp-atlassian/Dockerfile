@@ -1,97 +1,129 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.7
 
-# Single source of truth for the Python/Alpine base version used by BOTH the
-# build stage and the runtime stage. Previously these were two independently
-# floating tags (astral-sh/uv:python3.13-alpine for build, python:3.13-alpine
-# for runtime) which drifted out of sync -- Xray caught the build stage still
-# running Python 3.13.10 while the runtime stage was on 3.13.14. Pinning one
-# ARG here means there is exactly one place to bump when Python/Alpine ships
-# a security fix.
-ARG PYTHON_IMAGE=python:3.13.15-alpine3.24
+ARG ALPINE_VERSION=3.24
+ARG PYTHON_APK_VERSION=3.14.7-r1
 
-FROM ${PYTHON_IMAGE} AS builder
+# Exact application dependency versions already resolved in the hardened
+# uv.lock. These are promoted to explicit build inputs so the Docker build
+# fails closed if lock resolution ever drifts below the Xray-remediated set.
+ARG CRYPTOGRAPHY_VERSION=50.0.0
+ARG PYJWT_VERSION=2.13.0
+ARG URLLIB3_VERSION=2.7.0
+ARG CLICK_VERSION=8.4.2
+ARG IDNA_VERSION=3.19
+ARG SOUPSIEVE_VERSION=2.9.2
+ARG PYMDOWN_EXTENSIONS_VERSION=11.0.2
+ARG PYDANTIC_SETTINGS_VERSION=2.15.0
+ARG PYTHON_DOTENV_VERSION=1.2.3
+ARG PYGMENTS_VERSION=2.21.0
 
-# uv is a standalone static binary -- copy it in rather than using astral's
-# combined python+uv image, so the Python/Alpine version is controlled by
-# PYTHON_IMAGE alone. Pinned to an explicit release (not :latest) so mirroring
-# this build into Artifactory is reproducible.
+FROM alpine:${ALPINE_VERSION} AS builder
+
+ARG PYTHON_APK_VERSION
+ARG CRYPTOGRAPHY_VERSION
+ARG PYJWT_VERSION
+ARG URLLIB3_VERSION
+ARG CLICK_VERSION
+ARG IDNA_VERSION
+ARG SOUPSIEVE_VERSION
+ARG PYMDOWN_EXTENSIONS_VERSION
+ARG PYDANTIC_SETTINGS_VERSION
+ARG PYTHON_DOTENV_VERSION
+ARG PYGMENTS_VERSION
+
+# Use Alpine's packaged Python instead of the Docker Official Python image.
+# Xray can then resolve the exact interpreter from authoritative APK metadata
+# rather than fingerprinting the source-built interpreter as an older release.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
+        ca-certificates \
+        libgcc \
+        libstdc++ \
+        "python3=${PYTHON_APK_VERSION}" \
+    && apk info -e "python3=${PYTHON_APK_VERSION}" \
+    && python3 -c "import platform; assert platform.python_version() == '${PYTHON_APK_VERSION%-r*}', platform.python_version()"
+
+# uv is copied as a standalone binary and is forbidden from downloading or
+# substituting another interpreter.
 COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
-ENV UV_COMPILE_BYTECODE=1
-ENV UV_LINK_MODE=copy
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_PREFERENCE=only-system \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON=/usr/bin/python3
 
-# Xray flagged this image running Python 3.13.10 even though PYTHON_IMAGE
-# above already pins 3.13.15 -- uv's default python-preference is "managed",
-# so `uv sync` can silently ignore the base image's system interpreter and
-# provision its own downloaded CPython build instead, decoupling the venv's
-# actual Python (and its bundled ensurepip/setuptools) from PYTHON_IMAGE
-# entirely. Forcing only-system makes PYTHON_IMAGE the single source of
-# truth in practice, not just in the ARG name, and turns any future mismatch
-# into a build failure instead of a silent version regression.
-ENV UV_PYTHON_PREFERENCE=only-system
-ENV UV_PYTHON_DOWNLOADS=never
-
-# Allow injecting the package version at build time so that the image
-# reports the correct version even without a .git directory.
 ARG VERSION
 
-# Install dependencies from the committed lockfile only. (The previous
-# Dockerfile generated a throwaway lockfile from pyproject.toml+README.md
-# here, then immediately discarded it in favor of the committed uv.lock in
-# the step below -- that dead step is removed. The committed uv.lock is now
-# the single source of truth and is kept in sync with pyproject.toml.)
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     uv sync --frozen --extra wpad --no-install-project --no-dev --no-editable
 
-# Then, copy the rest of the project source code and install it
 COPY . /app
 RUN if [ -n "$VERSION" ] && echo "$VERSION" | grep -qE '^[0-9]'; then \
       sed -i "s/fallback-version = \"0.0.0\"/fallback-version = \"$VERSION\"/" pyproject.toml; \
     fi
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --extra wpad --no-dev --no-editable
 
-# Remove unnecessary files from the virtual environment before copying
-RUN find /app/.venv -name '__pycache__' -type d -exec rm -rf {} + && \
-    find /app/.venv -name '*.pyc' -delete && \
-    find /app/.venv -name '*.pyo' -delete && \
-    find /app/.venv -path '*/site-packages/setuptools*' -delete && \
-    find /app/.venv -path '*/site-packages/pip*' -delete && \
-    echo "Cleaned up .venv"
+# Bifrost-style fail-closed version assertions: prove the interpreter and each
+# Xray-remediated application dependency resolved to the exact intended version
+# before anything is copied into the runtime image.
+RUN /app/.venv/bin/python -c "import platform; assert platform.python_version() == '${PYTHON_APK_VERSION%-r*}', platform.python_version()" \
+    && /app/.venv/bin/python -c "from importlib.metadata import version; expected={'cryptography':'${CRYPTOGRAPHY_VERSION}','PyJWT':'${PYJWT_VERSION}','urllib3':'${URLLIB3_VERSION}','click':'${CLICK_VERSION}','idna':'${IDNA_VERSION}','soupsieve':'${SOUPSIEVE_VERSION}','pymdown-extensions':'${PYMDOWN_EXTENSIONS_VERSION}','pydantic-settings':'${PYDANTIC_SETTINGS_VERSION}','python-dotenv':'${PYTHON_DOTENV_VERSION}','Pygments':'${PYGMENTS_VERSION}'}; actual={name:version(name) for name in expected}; assert actual == expected, (actual, expected); print('remediated:', actual)" \
+    && find /app/.venv -name '__pycache__' -type d -exec rm -rf {} + \
+    && find /app/.venv -name '*.pyc' -delete \
+    && find /app/.venv -name '*.pyo' -delete \
+    && find /app/.venv -path '*/site-packages/setuptools*' -delete \
+    && find /app/.venv -path '*/site-packages/pip*' -delete
 
-# Final stage -- same base image/version as the builder above
-FROM ${PYTHON_IMAGE}
+FROM alpine:${ALPINE_VERSION}
 
-# Pick up any Alpine package security patches published after this base
-# image tag was built (e.g. sqlite-libs, libuuid), and remove the ensurepip
-# bundle: it ships its own copy of pip/setuptools that Xray will otherwise
-# keep flagging (CVE-2018-20225, CVE-2025-47273, CVE-2026-23949, etc.), and
-# this image never runs pip/ensurepip at runtime -- it only runs the
-# pre-built venv copied in below.
-RUN apk update && apk upgrade --no-cache && \
-    rm -rf /usr/local/lib/python3.*/ensurepip && \
-    rm -rf /var/cache/apk/*
+ARG PYTHON_APK_VERSION
+ARG CRYPTOGRAPHY_VERSION
+ARG PYJWT_VERSION
+ARG URLLIB3_VERSION
+ARG CLICK_VERSION
+ARG IDNA_VERSION
+ARG SOUPSIEVE_VERSION
+ARG PYMDOWN_EXTENSIONS_VERSION
+ARG PYDANTIC_SETTINGS_VERSION
+ARG PYTHON_DOTENV_VERSION
+ARG PYGMENTS_VERSION
+ARG SQLITE_MIN_VERSION=3.53.4-r0
 
-# Create a non-root user 'app'
-RUN adduser -D -h /home/app -s /bin/sh app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
+        ca-certificates \
+        libgcc \
+        libstdc++ \
+        "python3=${PYTHON_APK_VERSION}" \
+        "sqlite-libs>=${SQLITE_MIN_VERSION}" \
+    && rm -rf /usr/lib/python3.*/ensurepip \
+    && rm -rf /var/cache/apk/* \
+    && adduser -D -h /home/app -s /bin/sh app
+
 WORKDIR /app
-USER app
-
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
+# Verify the final artifact, not merely the builder inputs. Xray should see the
+# APK package record for Python 3.14.7-r1, while the runtime check proves the
+# venv uses that same interpreter and retains every fixed dependency version.
+RUN apk info -e "python3=${PYTHON_APK_VERSION}" \
+    && apk info -v python3 sqlite-libs \
+    && python3 -c "import platform; assert platform.python_version() == '${PYTHON_APK_VERSION%-r*}', platform.python_version()" \
+    && /app/.venv/bin/python -c "import platform; assert platform.python_version() == '${PYTHON_APK_VERSION%-r*}', platform.python_version()" \
+    && /app/.venv/bin/python -c "from importlib.metadata import version; expected={'cryptography':'${CRYPTOGRAPHY_VERSION}','PyJWT':'${PYJWT_VERSION}','urllib3':'${URLLIB3_VERSION}','click':'${CLICK_VERSION}','idna':'${IDNA_VERSION}','soupsieve':'${SOUPSIEVE_VERSION}','pymdown-extensions':'${PYMDOWN_EXTENSIONS_VERSION}','pydantic-settings':'${PYDANTIC_SETTINGS_VERSION}','python-dotenv':'${PYTHON_DOTENV_VERSION}','Pygments':'${PYGMENTS_VERSION}'}; actual={name:version(name) for name in expected}; assert actual == expected, (actual, expected); print('remediated:', actual)" \
+    && /app/.venv/bin/python -c "import importlib.util, pathlib, sqlite3; from importlib.metadata import distributions; from packaging.version import Version; assert importlib.util.find_spec('pip') is None, importlib.util.find_spec('pip'); assert importlib.util.find_spec('setuptools') is None, importlib.util.find_spec('setuptools'); roots=(pathlib.Path('/app/.venv'), pathlib.Path('/usr/lib')); forbidden=[str(path) for root in roots for path in root.rglob('*') if path.is_file() and ('/pip/_vendor/' in str(path) or '/ensurepip/_bundled/' in str(path))]; assert not forbidden, forbidden[:20]; packages={d.metadata['Name'].lower(): d.version for d in distributions() if d.metadata.get('Name')}; assert sqlite3.sqlite_version_info >= (3,53,4), sqlite3.sqlite_version; assert 'msgpack' not in packages or Version(packages['msgpack']) >= Version('1.2.1'), packages.get('msgpack'); import mcp_atlassian; from mcp_atlassian import main; assert callable(main)" \
+    && /app/.venv/bin/mcp-atlassian --help
 
-# Disable Python output buffering for proper stdio communication
-ENV PYTHONUNBUFFERED=1
+USER app
 
-# For minimal OAuth setup without environment variables, use:
-# docker run -e ATLASSIAN_OAUTH_ENABLE=true -p 8000:8000 your-image
-# Then provide authentication via headers:
-# Authorization: Bearer <your_oauth_token>
-# X-Atlassian-Cloud-Id: <your_cloud_id>
-
-ENTRYPOINT ["mcp-atlassian"]
+ENTRYPOINT ["/app/.venv/bin/mcp-atlassian"]
