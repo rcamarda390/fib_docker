@@ -5,12 +5,47 @@ ARG HEADROOM_COMMIT=32d7ca4577d599b8a5f811ada74cf31504302c9d
 ARG PYTHON_VERSION=3.13.15
 ARG PYTHON_ABI=3.13
 ARG DEBIAN_SUITE=trixie
+ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u3
+ARG GLIBC_BACKPORT_VERSION=1:2.41-12+deb13u3+rcamarda1
 ARG PIP_VERSION=26.2.1
 ARG LITELLM_VERSION=1.96.2
 ARG RUSTUP_VERSION=1.28.2
 ARG SQLITE_VERSION=3.53.4
 ARG SQLITE_AUTOCONF=3530400
 ARG SQLITE_SHA3=454e45f61c6bd75b7420e7190732dea03ce6639c63ada47bbc592f67fc340338
+
+FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
+ARG DEBIAN_SUITE
+ARG GLIBC_DEBIAN_VERSION
+ARG GLIBC_BACKPORT_VERSION
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+COPY patches/glibc/ /tmp/glibc-patches/
+
+RUN set -eux; \
+    sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates devscripts dpkg-dev git quilt; \
+    apt-get build-dep -y --no-install-recommends "glibc=${GLIBC_DEBIAN_VERSION}"; \
+    mkdir -p /build /out; \
+    cd /build; \
+    apt-get source "glibc=${GLIBC_DEBIAN_VERSION}"; \
+    cd "glibc-${GLIBC_DEBIAN_VERSION%%-*}"; \
+    for patch in /tmp/glibc-patches/*.patch; do \
+      git apply --check "$patch"; \
+      git apply "$patch"; \
+    done; \
+    DEBFULLNAME="rcamarda390 image build" \
+      DEBEMAIL="rcamarda390@users.noreply.github.com" \
+      dch --force-distribution --distribution "${DEBIAN_SUITE}" \
+        --newversion "${GLIBC_BACKPORT_VERSION}" \
+        "Backport upstream fixes for CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928."; \
+    DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -B -uc -us -j"$(nproc)"; \
+    cp ../libc6_*_*.deb ../libc-bin_*_*.deb /out/; \
+    dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
+    dpkg-deb -f /out/libc-bin_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"
 
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG HEADROOM_VERSION
@@ -214,6 +249,7 @@ FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
 ARG LITELLM_VERSION
+ARG GLIBC_BACKPORT_VERSION
 ARG PYTHON_VERSION
 ARG PYTHON_ABI
 ARG SQLITE_VERSION
@@ -238,8 +274,11 @@ ENV HEADROOM_SKIP_UPSTREAM_CHECK=1
 # level is set; a learned profile remains a deployment-time choice.
 ENV HEADROOM_OUTPUT_SHAPER=1
 
+COPY --from=glibc_patched /out/ /tmp/glibc/
 RUN apt-get update \
     && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends /tmp/glibc/libc6_*_*.deb /tmp/glibc/libc-bin_*_*.deb \
+    && rm -rf /tmp/glibc \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/headroom \
       --shell /usr/sbin/nologin headroom \
@@ -305,11 +344,11 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 # package so scanners see only the remediated implementation. The final check
 # exercises both ordinary queries and FTS5 through Python's real extension.
 #
-# Three glibc findings remain without a fix in Debian stable:
-#   CVE-2026-5450 and CVE-2026-5928 are fixed in >= 2.42; CVE-2026-5435 is
-#   fixed in >= 2.43. Debian trixie ships 2.41 and classifies all three as
-#   <no-dsa> minor issues. Forky currently carries the fixes, but moving a
-#   production image from stable onto testing for libc alone is not supported.
+# The scanner's remaining critical/high findings are in trixie's glibc 2.41
+# packages. Debian has no stable fix yet, so the glibc_patched stage rebuilds
+# the matching trixie source package with upstream release/2.41 fixes for
+# CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928, and the runtime stage
+# installs the coherent libc6/libc-bin pair from that rebuild.
 # dpkg is used instead of `apt-get purge --auto-remove` because gzip and
 # ncurses-bin are Essential and apt would cascade into debconf. No apt
 # operations run after this layer, so unsatisfied dependencies are inert.
@@ -364,9 +403,11 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && { PATH="/opt/venv/bin:${PATH}" python -c \
     "import awscrt; print(f'  awscrt {awscrt.__version__} also available')" || true; } \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
+ && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
+ && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1' \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u2' \
- && dpkg-query -W libc6 zlib1g libssl3t64 \
+ && dpkg-query -W libc6 libc-bin zlib1g libssl3t64 \
  && ! dpkg-query -W libsqlite3-0 libpam-modules-bin libncursesw6 openssl 2>/dev/null \
  && ! command -v perl \
  && ! command -v gzip \

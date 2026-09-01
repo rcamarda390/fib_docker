@@ -26,6 +26,10 @@ on:
         required: false
         default: linux/amd64,linux/arm64
         type: string
+      timeout_minutes:
+        required: false
+        default: 30
+        type: number
       smoke_command:
         required: false
         default: ""
@@ -174,7 +178,7 @@ jobs:
     needs: guard
     if: needs.guard.outputs.revision_only != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
       ghcr_image: ${{ steps.meta.outputs.ghcr_image }}

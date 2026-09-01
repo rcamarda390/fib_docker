@@ -36,6 +36,7 @@ jobs:
       config: images/headroom-mcp/image.yaml
       version_arg: HEADROOM_VERSION
       platforms: linux/amd64
+      timeout_minutes: 90
       smoke_command: __smoke
       # Measured on run 32311533470: ~7s proxy boot, ~1s health + dashboard, and
       # ~5s for the first /v1/compress, which lazily loads the Kompress ONNX
