@@ -5,6 +5,7 @@ upstream_version: 0.37.0
 revision: 3
 build_args:
   HEADROOM_COMMIT: 32d7ca4577d599b8a5f811ada74cf31504302c9d
+  LITELLM_VERSION: 1.96.2
 publish:
   ghcr: true
   dockerhub: true

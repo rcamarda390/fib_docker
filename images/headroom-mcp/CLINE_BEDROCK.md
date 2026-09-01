@@ -26,14 +26,14 @@ For supported models, the patch adds:
 ```
 
 to the stable system message (or the last block of list-form system content).
-LiteLLM 1.88.1 natively converts that message-level marker into a Bedrock
+LiteLLM 1.96.2 natively converts that message-level marker into a Bedrock
 Converse `cachePoint`.
 
 For models that do not report `cache_control` support, no marker is added and
 the request proceeds normally with prompt caching effectively off.
 
 The previous `cache_control_injection_points` approach was removed. In the
-Headroom/LiteLLM 1.88.1 path it could reach Bedrock as a raw Converse request
+Headroom/LiteLLM 1.96.2 path it could reach Bedrock as a raw Converse request
 field, producing:
 
 ```text
@@ -45,7 +45,7 @@ prefix is the highest-value stable region for Cline and avoids moving cache
 breakpoints as the conversation grows.
 
 Tool-config caching is intentionally not injected by this patch because the
-installed LiteLLM 1.88.1 path has a verified native system-message conversion,
+installed LiteLLM 1.96.2 path has a verified native system-message conversion,
 but no equally reliable tool-config marker path was found. This avoids trading
 cache savings for request failures.
 

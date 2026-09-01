@@ -6,6 +6,7 @@ ARG PYTHON_VERSION=3.13.15
 ARG PYTHON_ABI=3.13
 ARG DEBIAN_SUITE=trixie
 ARG PIP_VERSION=26.2.1
+ARG LITELLM_VERSION=1.96.2
 ARG RUSTUP_VERSION=1.28.2
 ARG SQLITE_VERSION=3.53.4
 ARG SQLITE_AUTOCONF=3530400
@@ -23,6 +24,7 @@ FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder
 ARG HEADROOM_VERSION
 ARG PYTHON_VERSION
 ARG PIP_VERSION
+ARG LITELLM_VERSION
 ARG RUSTUP_VERSION
 ARG SQLITE_VERSION
 ARG SQLITE_AUTOCONF
@@ -100,18 +102,20 @@ COPY --from=source /src/headroom/ headroom/
 # LiteLLM backends. The bedrock extra adds boto3 and botocore for AWS SDK
 # support required to reach AWS Bedrock from an air-gapped GovCloud environment.
 RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
-# There is deliberately no pip step here. `uv sync` builds /opt/venv without
-# seeding pip or setuptools, so any `pip`, `/opt/venv/bin/pip`, or
-# `python -m pip` invocation against this venv fails with "No module named
-# pip" -- use `uv pip install --python /opt/venv/bin/python` if a package ever
-# genuinely needs adding. The setuptools/msgpack upgrades that used to live
-# here targeted packages that headroom does not install: neither appears in the
-# proxy+bedrock resolution of the pinned lockfile, so the upgrade would have
-# added CVE surface rather than removing it. Re-check that on a version bump
-# with `uv export --frozen --extra proxy --extra bedrock --no-dev` against the
-# release being pinned; it still holds for 0.37.0. Trivy scans the built image
-# and will report either package if it reappears with a known advisory (reported
-# only, not blocking: this image leaves block_on_scan_failure at its default).
+# Xray XRAY-1062440 reports Headroom 0.37.0's locked LiteLLM 1.88.1 and fixes
+# it in 1.96.2. Keep the immutable upstream lock for every other dependency,
+# then make this single, explicit downstream security override. uv mutates the
+# existing venv without installing pip or setuptools. Remove this carry when a
+# future Headroom release locks LiteLLM >= 1.96.2.
+RUN uv pip install --python /opt/venv/bin/python --upgrade \
+      "litellm==${LITELLM_VERSION}" \
+    && test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("litellm"))')" = "$LITELLM_VERSION" \
+    && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
+# The setuptools/msgpack upgrades that used to live here targeted packages
+# that Headroom does not install: neither appears in the proxy+bedrock
+# resolution. Re-check that on an upstream version bump with `uv export
+# --frozen --extra proxy --extra bedrock --no-dev`. Trivy reports any
+# reappearance with a known advisory.
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
     "from headroom._core import DiffCompressor, SmartCrusher; \
      print(f'Headroom Rust core OK: {DiffCompressor.__name__}, {SmartCrusher.__name__}')"
@@ -209,6 +213,7 @@ EOF
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
+ARG LITELLM_VERSION
 ARG PYTHON_VERSION
 ARG PYTHON_ABI
 ARG SQLITE_VERSION
@@ -353,8 +358,9 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      ssl.create_default_context(); \
      print(f'Verification: Python stdlib (SQLite {sqlite3.sqlite_version}, FTS5, ssl, compression) OK')" \
  && PATH="/opt/venv/bin:${PATH}" python -c \
-    "import boto3, botocore; \
-     print(f'Verification: AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
+    "import boto3, botocore, importlib.metadata, litellm; \
+     assert importlib.metadata.version('litellm') == '${LITELLM_VERSION}'; \
+     print(f'Verification: LiteLLM {importlib.metadata.version(\"litellm\")}; AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
  && { PATH="/opt/venv/bin:${PATH}" python -c \
     "import awscrt; print(f'  awscrt {awscrt.__version__} also available')" || true; } \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
