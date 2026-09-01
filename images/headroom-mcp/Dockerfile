@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG HEADROOM_VERSION=0.36.5
-ARG HEADROOM_COMMIT=34a551756222b24ea4bc064f4250b8e7d169daf1
+ARG HEADROOM_VERSION=0.37.0
+ARG HEADROOM_COMMIT=32d7ca4577d599b8a5f811ada74cf31504302c9d
 ARG PYTHON_VERSION=3.13
 ARG PIP_VERSION=26.2.1
 ARG RUSTUP_VERSION=1.28.2
@@ -75,7 +75,7 @@ RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 # proxy+bedrock resolution of the pinned lockfile, so the upgrade would have
 # added CVE surface rather than removing it. Re-check that on a version bump
 # with `uv export --frozen --extra proxy --extra bedrock --no-dev` against the
-# release being pinned; it still holds for 0.36.5. Trivy scans the built image
+# release being pinned; it still holds for 0.37.0. Trivy scans the built image
 # and will report either package if it reappears with a known advisory (reported
 # only, not blocking: this image leaves block_on_scan_failure at its default).
 RUN cd /tmp && PATH="/opt/venv/bin:${PATH}" python -c \
@@ -85,6 +85,25 @@ RUN test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; p
 RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import boto3, botocore; \
      print(f'Bedrock dependencies OK: boto3 {boto3.__version__}, botocore {botocore.__version__}')"
+
+# ---------------------------------------------------------------------------
+# Downstream carry: Cline's OpenAI-compatible transport to AWS Bedrock.
+# Short-lived -- delete this block, the two ENV lines in the runtime stage that
+# reference it, and the two scripts once the fixes land upstream. See
+# CLINE_BEDROCK.md.
+#
+# Apply the patch directly to the venv built from the pinned upstream source so
+# one action produces the complete deployable image. The patch fails closed if
+# upstream's two OpenAI call sites change, and the regression script verifies
+# both streaming and non-streaming Bedrock behavior.
+COPY patch-headroom-bedrock-openai.py bedrock-openai-regression.py /tmp/
+RUN set -eu; \
+    export PATH="/opt/venv/bin:${PATH}"; \
+    target="$(python -c 'import headroom.backends.litellm as m; print(m.__file__)')"; \
+    python /tmp/patch-headroom-bedrock-openai.py "$target"; \
+    python -m py_compile "$target"; \
+    python /tmp/bedrock-openai-regression.py
+# ---------------------------------------------------------------------------
 
 # Pre-cache Hugging Face models needed for Kompress compression in the air-gapped runtime.
 # When HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 are set at runtime, these models
@@ -167,6 +186,15 @@ ENV HEADROOM_HOST=0.0.0.0 \
     HF_HUB_DISABLE_TELEMETRY=1 \
     LITELLM_LOCAL_MODEL_COST_MAP=True \
     HEADROOM_UPDATE_CHECK=off
+
+# Skip only Headroom's external upstream readiness probe. The air-gapped
+# GovCloud runtime intentionally cannot reach the Anthropic HTTP endpoint;
+# this does not change TLS verification for real Bedrock traffic.
+ENV HEADROOM_SKIP_UPSTREAM_CHECK=1
+
+# Enable Headroom's live per-request output-token shaping. No fixed verbosity
+# level is set; a learned profile remains a deployment-time choice.
+ENV HEADROOM_OUTPUT_SHAPER=1
 
 RUN apt-get update \
     && apt-get upgrade -y \
