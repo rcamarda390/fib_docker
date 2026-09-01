@@ -5,7 +5,10 @@ on:
   push:
     branches: [main]
     paths: ['images/headroom-mcp/**']
-  
+
+concurrency:
+  group: headroom-mcp-publish
+  cancel-in-progress: true
 
 permissions:
   contents: write
