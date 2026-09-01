@@ -99,6 +99,7 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 COPY patch-headroom-bedrock-openai.py bedrock-openai-regression.py /tmp/
 RUN set -eu; \
     export PATH="/opt/venv/bin:${PATH}"; \
+    cd /tmp; \
     target="$(python -c 'import headroom.backends.litellm as m; print(m.__file__)')"; \
     python /tmp/patch-headroom-bedrock-openai.py "$target"; \
     python -m py_compile "$target"; \
