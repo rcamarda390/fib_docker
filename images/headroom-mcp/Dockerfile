@@ -107,7 +107,7 @@ RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 # then make this single, explicit downstream security override. uv mutates the
 # existing venv without installing pip or setuptools. Remove this carry when a
 # future Headroom release locks LiteLLM >= 1.96.2.
-RUN uv pip install --python /opt/venv/bin/python --upgrade \
+RUN uv pip install --python /opt/venv/bin/python --upgrade-package litellm \
       "litellm==${LITELLM_VERSION}" \
     && test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("litellm"))')" = "$LITELLM_VERSION" \
     && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
