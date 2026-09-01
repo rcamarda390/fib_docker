@@ -3,6 +3,7 @@
 ARG HEADROOM_VERSION=0.37.0
 ARG HEADROOM_COMMIT=32d7ca4577d599b8a5f811ada74cf31504302c9d
 ARG PYTHON_VERSION=3.13.15
+ARG PYTHON_ABI=3.13
 ARG DEBIAN_SUITE=trixie
 ARG PIP_VERSION=26.2.1
 ARG RUSTUP_VERSION=1.28.2
@@ -209,6 +210,7 @@ FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
 ARG PYTHON_VERSION
+ARG PYTHON_ABI
 ARG SQLITE_VERSION
 
 ENV HEADROOM_HOST=0.0.0.0 \
@@ -257,10 +259,10 @@ RUN apt-get update \
 # extension -- but the code is genuinely gone now rather than argued away.
 # The verification at the end of this stage asserts pip is absent, so this
 # cannot silently regress into a no-op.
-RUN rm -rf /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip \
-           /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip-*.dist-info \
-           /usr/local/lib/python${PYTHON_VERSION}/ensurepip/_bundled \
-           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip${PYTHON_VERSION} \
+RUN rm -rf /usr/local/lib/python${PYTHON_ABI}/site-packages/pip \
+           /usr/local/lib/python${PYTHON_ABI}/site-packages/pip-*.dist-info \
+           /usr/local/lib/python${PYTHON_ABI}/ensurepip/_bundled \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip${PYTHON_ABI} \
            /root/.cache
 # Every perl-base CVE the scanner reports against the Debian runtime is published with no
 # fixed version, so `apt-get upgrade` above cannot clear them. Nothing in this
@@ -318,7 +320,7 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 # the debconf database. dpkg removes the package's files either way.
 COPY --from=builder /opt/sqlite/lib/ /usr/local/lib/
 RUN ldconfig \
- && rm -f /usr/local/lib/python${PYTHON_VERSION}/lib-dynload/_curses*.so \
+ && rm -f /usr/local/lib/python${PYTHON_ABI}/lib-dynload/_curses*.so \
  && mkdir -p /usr/share/debconf \
  && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
  && chmod 0755 /usr/share/debconf/frontend \
@@ -332,7 +334,7 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/headroom-cache /opt/headroom-cache
 COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
-RUN find /usr/local/lib/python${PYTHON_VERSION} /opt/venv \
+RUN find /usr/local/lib/python${PYTHON_ABI} /opt/venv \
       -name '_curses*.so' -delete \
     && chmod +x /usr/local/bin/headroom-entrypoint \
     && chown -R headroom:headroom /opt/headroom-cache
