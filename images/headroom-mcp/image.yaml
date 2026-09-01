@@ -2,7 +2,7 @@ name: headroom-mcp
 upstream_version: 0.37.0
 # A superseded recovery run already published v2. Reserve that immutable tag so
 # build-image.yml advances this remediation to v3 instead of overwriting it.
-revision: 2
+revision: 3
 build_args:
   HEADROOM_COMMIT: 32d7ca4577d599b8a5f811ada74cf31504302c9d
 publish:
