@@ -332,7 +332,9 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/headroom-cache /opt/headroom-cache
 COPY mcp-smoke.py /usr/local/bin/mcp-smoke.py
 COPY entrypoint.sh /usr/local/bin/headroom-entrypoint
-RUN chmod +x /usr/local/bin/headroom-entrypoint \
+RUN find /usr/local/lib/python${PYTHON_VERSION} /opt/venv \
+      -name '_curses*.so' -delete \
+    && chmod +x /usr/local/bin/headroom-entrypoint \
     && chown -R headroom:headroom /opt/headroom-cache
 # Verify that purged packages didn't break critical runtime functionality.
 # `python -c "import sys"` proved nothing: it passed while libsqlite3-0 was
