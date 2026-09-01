@@ -32,7 +32,7 @@ The live `main` branch currently contains seven image targets under `images/`:
 | `images/atlassian-mcp/` | `atlassian-mcp` | 0.23.0 | 12 | Atlassian MCP image |
 | `images/bifrost-mcp/` | `bifrost-mcp` | 1.6.11 | 9 | Bifrost gateway image pinned to a specific upstream commit |
 | `images/gnosis-mcp/` | `gnosis-mcp` | 0.14.1 | 1 | Air-gap Gnosis documentation MCP server with local embeddings |
-| `images/headroom-mcp/` | `headroom-mcp` | 0.36.5 | 1 | Headroom proxy/MCP image with Bedrock-oriented variants |
+| `images/headroom-mcp/` | `headroom-mcp` | 0.37.0 | 1 | Headroom proxy/MCP image with Bedrock-oriented variants |
 | `images/sooperset-mcp-atlassian/` | `sooperset-mcp-atlassian` | 1.0.0 | 9 | Sooperset Atlassian MCP image |
 | `images/sqz-mcp/` | `sqz-mcp` | 1.3.0 | 4 | SQZ MCP image pinned to a specific upstream commit |
 

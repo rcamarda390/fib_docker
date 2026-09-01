@@ -33,16 +33,12 @@ one exception — it also builds on a push to `main` under
 `images/headroom-mcp/**`, which matters when bumping its version (below).
 
 `headroom-mcp` currently ships a downstream source patch for Cline's
-OpenAI-compatible Bedrock transport, so it has two Dockerfiles:
-`Dockerfile` builds the upstream base image, and `Dockerfile.cline-bedrock`
-applies the patch on top of a *published* base tag it pins in
-`HEADROOM_BASE_IMAGE`. Bumping `upstream_version` therefore needs two builds in
-order — the base first (dispatch the workflow with `dockerfile: Dockerfile`),
-then the carry — and the pin has to be moved to the new version's `-v1` tag as
-part of the same change. Leaving it on the old version's tag publishes an image
-whose tag says one Headroom version and whose contents are another. The full
-procedure, including how to re-verify the patch against the new release before
-building, is in
+OpenAI-compatible Bedrock transport. The main `Dockerfile` applies that patch
+inside its builder stage and runs the regression suite before the finished venv
+enters the runtime image. Bumping `upstream_version` therefore takes one build,
+and the shared workflow resets every new upstream release to revision `v1`.
+The full procedure, including how to re-verify the patch against the new release
+before building, is in
 [`images/headroom-mcp/CLINE_BEDROCK.md`](../images/headroom-mcp/CLINE_BEDROCK.md).
 
 `gnosis-mcp` currently means the air-gap build: its ONNX embedding model is

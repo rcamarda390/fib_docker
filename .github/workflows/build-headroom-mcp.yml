@@ -2,19 +2,6 @@ name: Build and publish Headroom MCP image
 
 on:
   workflow_dispatch:
-    inputs:
-      dockerfile:
-        description: >-
-          Which Dockerfile to build. Dockerfile.cline-bedrock (the default)
-          applies the downstream Bedrock carry on top of the base image pinned
-          in its HEADROOM_BASE_IMAGE. Dockerfile builds that base image from
-          upstream source, and has to be run once after every upstream_version
-          bump -- the carry cannot build until the base tag it pins exists.
-        type: choice
-        default: Dockerfile.cline-bedrock
-        options:
-          - Dockerfile.cline-bedrock
-          - Dockerfile
   push:
     branches: [main]
     paths: ['images/headroom-mcp/**']
@@ -40,12 +27,9 @@ jobs:
     with:
       image_name: headroom-mcp
       context: ./images/headroom-mcp
-      # 0.36.3 downstream carry: build-time patch for Cline OpenAI-compatible
-      # traffic to Bedrock. Revert to Dockerfile once the fixes land upstream.
-      # A push build always takes the carry; `inputs.dockerfile` is only
-      # populated for workflow_dispatch, which is how the base image gets built
-      # after a version bump (see images/headroom-mcp/CLINE_BEDROCK.md).
-      dockerfile: ./images/headroom-mcp/${{ inputs.dockerfile || 'Dockerfile.cline-bedrock' }}
+      # The main Dockerfile includes the downstream Cline/Bedrock carry, so one
+      # action builds and publishes the complete deployable image.
+      dockerfile: ./images/headroom-mcp/Dockerfile
       config: images/headroom-mcp/image.yaml
       version_arg: HEADROOM_VERSION
       platforms: linux/amd64
