@@ -2,9 +2,13 @@
 
 ARG HEADROOM_VERSION=0.37.0
 ARG HEADROOM_COMMIT=32d7ca4577d599b8a5f811ada74cf31504302c9d
-ARG PYTHON_VERSION=3.13
+ARG PYTHON_VERSION=3.13.15
+ARG DEBIAN_SUITE=trixie
 ARG PIP_VERSION=26.2.1
 ARG RUSTUP_VERSION=1.28.2
+ARG SQLITE_VERSION=3.53.4
+ARG SQLITE_AUTOCONF=3530400
+ARG SQLITE_SHA3=454e45f61c6bd75b7420e7190732dea03ce6639c63ada47bbc592f67fc340338
 
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG HEADROOM_VERSION
@@ -14,11 +18,14 @@ RUN apk add --no-cache ca-certificates git \
        https://github.com/headroomlabs-ai/headroom.git /src \
     && test "$(git -C /src rev-parse HEAD)" = "$HEADROOM_COMMIT"
 
-FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder
 ARG HEADROOM_VERSION
 ARG PYTHON_VERSION
 ARG PIP_VERSION
 ARG RUSTUP_VERSION
+ARG SQLITE_VERSION
+ARG SQLITE_AUTOCONF
+ARG SQLITE_SHA3
 
 ENV CARGO_HOME=/usr/local/cargo \
     RUSTUP_HOME=/usr/local/rustup \
@@ -36,6 +43,32 @@ RUN apt-get update \
 RUN python -m pip install --no-cache-dir \
       "pip==${PIP_VERSION}" \
       "uv==0.11.18"
+
+# Debian trixie's SQLite fixes CVE-2025-7458, but its 3.46 package predates
+# the 3.53.2 fixes for CVE-2026-11822 and CVE-2026-11824. Build the current
+# upstream 3.53.4 amalgamation as a shared library, verify SQLite's published
+# SHA3-256, and retain FTS5 rather than avoiding the vulnerable code by
+# disabling application functionality.
+RUN set -eux; \
+    curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+      "https://sqlite.org/2026/sqlite-autoconf-${SQLITE_AUTOCONF}.tar.gz" \
+      --output /tmp/sqlite.tar.gz; \
+    python -c "import hashlib; actual=hashlib.file_digest(open('/tmp/sqlite.tar.gz','rb'),'sha3_256').hexdigest(); assert actual == '${SQLITE_SHA3}', actual"; \
+    tar -xzf /tmp/sqlite.tar.gz -C /tmp; \
+    mkdir -p /opt/sqlite/lib; \
+    cc -O2 -fPIC -shared -Wl,-soname,libsqlite3.so.0 \
+      -DSQLITE_THREADSAFE=1 \
+      -DSQLITE_ENABLE_COLUMN_METADATA \
+      -DSQLITE_ENABLE_DBSTAT_VTAB \
+      -DSQLITE_ENABLE_FTS5 \
+      -DSQLITE_ENABLE_MATH_FUNCTIONS \
+      -DSQLITE_ENABLE_RTREE \
+      "/tmp/sqlite-autoconf-${SQLITE_AUTOCONF}/sqlite3.c" \
+      -ldl -lpthread -lm \
+      -o /opt/sqlite/lib/libsqlite3.so.0.8.6; \
+    ln -s libsqlite3.so.0.8.6 /opt/sqlite/lib/libsqlite3.so.0; \
+    LD_LIBRARY_PATH=/opt/sqlite/lib python -c "import sqlite3; assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute('insert into docs values (\"headroom\")'); assert db.execute('select body from docs where docs match \"headroom\"').fetchone() == ('headroom',)"; \
+    rm -rf /tmp/sqlite.tar.gz "/tmp/sqlite-autoconf-${SQLITE_AUTOCONF}"
 # Checksums come from the matching rustup-init.sha256 file in the Rust release
 # archive.
 RUN set -eux; \
@@ -172,10 +205,11 @@ HFCACHE
 EOF
 
 
-FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
 ARG PYTHON_VERSION
+ARG SQLITE_VERSION
 
 ENV HEADROOM_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1 \
@@ -228,7 +262,7 @@ RUN rm -rf /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip \
            /usr/local/lib/python${PYTHON_VERSION}/ensurepip/_bundled \
            /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip${PYTHON_VERSION} \
            /root/.cache
-# Every perl-base CVE the scanner reports against bookworm is published with no
+# Every perl-base CVE the scanner reports against the Debian runtime is published with no
 # fixed version, so `apt-get upgrade` above cannot clear them. Nothing in this
 # image invokes perl: the entrypoint is dash and the payload is Python plus a
 # Rust extension module. Drop the package outright rather than carry unfixable
@@ -239,55 +273,36 @@ RUN rm -rf /usr/local/lib/python${PYTHON_VERSION}/site-packages/pip \
 # silently degrade into a no-op.
 RUN dpkg --purge --force-depends --force-remove-essential perl-base \
     && ! command -v perl
-# Debian bookworm CVEs: 15 findings with no fixed version, classified as
-# <no-dsa> "Minor issue" in Debian security tracker. These packages are not
-# used at runtime:
-#   gzip           CVE-2026-41992 -- nothing shells out to gzip or untars at
-#                                    runtime. Note this is the gzip *binary*
-#                                    only: Python's zlib module links
-#                                    libz.so.1 from zlib1g dynamically, so
-#                                    zlib1g itself must stay.
-#   ncurses-bin    CVE-2025-69720 -- bash links libtinfo.so.6; headroom uses
-#   ncurses-base                      dash for entrypoint and Python for
-#   libtinfo6                         payload, so none of it is used
+# Scanner-visible packages that are not used at runtime are removed after the
+# final apt operation:
+#   gzip            -- nothing shells out to gzip or untars at runtime. Python
+#                      still retains the dynamically linked zlib module.
+#   ncurses packages -- CVE-2025-69720 is in the infocmp CLI. Headroom has no
+#                       terminal UI, so both the CLI and Python's optional
+#                       _curses modules are removed instead of retaining the
+#                       source-package finding through libncursesw6.
 #   libacl1        CVE-2026-54369 -- only cp/mv/install/tar link libacl.so.1;
 #   libattr1       CVE-2026-54371    headroom uses mkdir/chown/cat only
 #   libpam0g       CVE-2025-8941  -- headroom doesn't authenticate through PAM;
-#   libpam-modules                    gosu uses plain setuid/setgid, user lookup
-#   libpam-runtime                    via glibc NSS, not PAM
+#   libpam-modules, libpam-modules-bin, libpam-runtime
+#                                     user lookup uses glibc NSS, not PAM
 #   libtasn1-6     CVE-2025-13151 -- only used for X.509 cert parsing; Python's
 #                                    ssl uses system certs, doesn't need libtasn1
+#   openssl         -- the CLI is unused; Python ssl retains trixie's patched
+#                      libssl runtime package.
 #
-# libsqlite3-0 is deliberately NOT purged, and must not be added to the list
-# below. Python 3.13's sqlite3 is a dynamically linked extension
-# (lib-dynload/_sqlite3.*.so -> libsqlite3.so.0), and headroom imports sqlite3
-# on the `mcp serve` path (compression cache store, memory store, Codex thread
-# recovery). Purging it builds a green image that dies at startup with
-# "ImportError: libsqlite3.so.0: cannot open shared object file". That shipped
-# once and had to be reverted; the verification step at the end of this stage
-# now fails the build if it ever happens again.
+# Headroom imports sqlite3 on the `mcp serve` path (compression cache store,
+# memory store, and Codex thread recovery), so SQLite cannot simply disappear.
+# The builder compiles the verified 3.53.4 upstream release; copy it into the
+# loader's preferred /usr/local path, then remove Debian's older libsqlite3-0
+# package so scanners see only the remediated implementation. The final check
+# exercises both ordinary queries and FTS5 through Python's real extension.
 #
-# The scanner reports bookworm's libsqlite3-0 3.40.1-2+deb12u2 as CVE-2025-7458
-# (CVSS 9.1, CWE-190), and Debian additionally tracks CVE-2025-7709 and
-# CVE-2026-11822/-11824/-50812/-50813 against it. Every one is <no-dsa> "Minor
-# issue" with no fixed version for bookworm -- CVE-2025-7458 is fixed only in
-# 3.42.0-1 -- so `apt-get upgrade` above can never clear them. CVE-2025-7458
-# requires an attacker who can execute arbitrary SQL; upstream's fix (check-in
-# 12ad822d9b827777) is a query-planner correctness fix for
-# `SELECT DISTINCT <constant terms> ... ORDER BY`, not memory corruption.
-# headroom builds all of its own SQL and never executes SQL supplied by an MCP
-# client, so that precondition does not exist here. Actually clearing the
-# finding requires SQLite >= 3.42, i.e. a base-image move to trixie or a
-# vendored upstream SQLite -- a deliberate change, not a purge.
-# Two CVEs are truly unfixable without base image upgrade:
-#   CVE-2026-5435  (glibc) -- No upstream fix at all yet
-#   CVE-2026-5928  (glibc) -- Fixed only in glibc 2.42. trixie ships 2.41, so a
-#                             move to trixie would NOT clear it; 2.42 first
-#                             appears in forky/sid. The same is true of
-#                             CVE-2026-5450, which the scanner reports against
-#                             libc-bin: <no-dsa> in bookworm and trixie alike.
-#                             It needs scanf("%mc") with an explicit field width
-#                             above 1024, which CPython never calls.
+# Three glibc findings remain without a fix in Debian stable:
+#   CVE-2026-5450 and CVE-2026-5928 are fixed in >= 2.42; CVE-2026-5435 is
+#   fixed in >= 2.43. Debian trixie ships 2.41 and classifies all three as
+#   <no-dsa> minor issues. Forky currently carries the fixes, but moving a
+#   production image from stable onto testing for libc alone is not supported.
 # dpkg is used instead of `apt-get purge --auto-remove` because gzip and
 # ncurses-bin are Essential and apt would cascade into debconf. No apt
 # operations run after this layer, so unsatisfied dependencies are inert.
@@ -301,13 +316,17 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 # satisfies the exec so the purge completes and dpkg records it as such.
 # Skipping that cleanup is harmless: it only drops the package's entries from
 # the debconf database. dpkg removes the package's files either way.
-RUN mkdir -p /usr/share/debconf \
+COPY --from=builder /opt/sqlite/lib/ /usr/local/lib/
+RUN ldconfig \
+ && rm -f /usr/local/lib/python${PYTHON_VERSION}/lib-dynload/_curses*.so \
+ && mkdir -p /usr/share/debconf \
  && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
  && chmod 0755 /usr/share/debconf/frontend \
  && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-      gzip ncurses-bin ncurses-base libtinfo6 \
+      gzip ncurses-bin ncurses-base libtinfo6 libncursesw6 \
       libacl1 libattr1 \
-      libpam-runtime libpam-modules libpam0g libtasn1-6 \
+      libpam-runtime libpam-modules libpam-modules-bin libpam0g libtasn1-6 \
+      libsqlite3-0 openssl \
  && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/headroom-cache /opt/headroom-cache
@@ -322,19 +341,27 @@ RUN chmod +x /usr/local/bin/headroom-entrypoint \
 # actually exercise sqlite3 and ssl, so a bad purge fails here -- in the stage
 # that caused it -- instead of surfacing later as an opaque MCP startup error.
 RUN PATH="/opt/venv/bin:${PATH}" python -c \
-    "import ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
+    "import importlib.util, ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
+     assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; \
      sqlite3.connect(':memory:').execute('select 1').fetchone(); \
+     db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute('insert into docs values (\"headroom\")'); assert db.execute('select body from docs where docs match \"headroom\"').fetchone() == ('headroom',); \
+     assert importlib.util.find_spec('_curses') is None; \
      ssl.create_default_context(); \
-     print('Verification: Python stdlib (sqlite3, ssl, compression) OK')" \
+     print(f'Verification: Python stdlib (SQLite {sqlite3.sqlite_version}, FTS5, ssl, compression) OK')" \
  && PATH="/opt/venv/bin:${PATH}" python -c \
     "import boto3, botocore; \
      print(f'Verification: AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
  && { PATH="/opt/venv/bin:${PATH}" python -c \
     "import awscrt; print(f'  awscrt {awscrt.__version__} also available')" || true; } \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1' \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u2' \
+ && dpkg-query -W libc6 zlib1g libssl3t64 \
+ && ! dpkg-query -W libsqlite3-0 libpam-modules-bin libncursesw6 openssl 2>/dev/null \
  && ! command -v perl \
  && ! command -v gzip \
  && ! command -v tput \
+ && ! command -v openssl \
  && ! command -v pip \
  && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
 
