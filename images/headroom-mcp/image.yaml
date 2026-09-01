@@ -1,8 +1,8 @@
 name: headroom-mcp
 upstream_version: 0.37.0
-# Reset each new upstream release to v1. build-image.yml also detects an
-# upstream_version change and forces the published revision to 1.
-revision: 1
+# Revision 0 retries the failed first publication; build-image.yml increments
+# it to the requested v1 tag. The successful action records revision 1.
+revision: 0
 build_args:
   HEADROOM_COMMIT: 32d7ca4577d599b8a5f811ada74cf31504302c9d
 publish:
