@@ -1,4 +1,4 @@
-# Repository Instructions
+# Agent Instructions
 
 The authoritative repository-wide instructions are maintained in:
 
