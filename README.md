@@ -29,7 +29,6 @@ The live `main` branch contains image targets under `images/`:
 | Directory | Image | Upstream version | Revision | Notes |
 | --- | --- | ---: | ---: | --- |
 | `images/agentmemory-server/` | `agentmemory` | 0.9.29 | 1 | Self-contained AgentMemory server; builds with iii engine 0.11.2 |
-| `images/archify/` | `archify` | 2.16.0 | 1 | Verifiable diagram CLI and agent skill with Chromium visual checks |
 | `images/atlassian-mcp/` | `atlassian-mcp` | 0.23.0 | 12 | Atlassian MCP image |
 | `images/bifrost-mcp/` | `bifrost-mcp` | 1.6.11 | 9 | Bifrost gateway image pinned to a specific upstream commit |
 | `images/gnosis-mcp/` | `gnosis-mcp` | 0.14.1 | 1 | Air-gap Gnosis documentation MCP server with local embeddings |
@@ -58,7 +57,6 @@ The primary image structure is therefore:
 ```text
 images/
 ├── agentmemory-server/
-├── archify/
 ├── atlassian-mcp/
 ├── bifrost-mcp/
 ├── gnosis-mcp/
@@ -131,7 +129,6 @@ The live workflow inventory includes image-specific entry-point workflows:
 ```text
 .github/workflows/
 ├── build-agentmemory-server.yml
-├── build-archify.yml
 ├── build-atlassian-mcp.yml
 ├── build-bifrost-mcp.yml
 ├── build-gnosis-mcp.yml
