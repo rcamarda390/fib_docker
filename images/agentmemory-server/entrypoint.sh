@@ -22,7 +22,7 @@ III_CONFIG="/opt/agentmemory/node_modules/@agentmemory/agentmemory/dist/iii-conf
 
 if [ "${1:-}" = "--offline-embedding-test" ]; then
   shift
-  exec gosu "$RUN_AS" node /usr/local/lib/agentmemory/offline-embedding-smoke.mjs "$@"
+  exec gosu "$RUN_AS" node /opt/agentmemory/offline-embedding-smoke.mjs "$@"
 fi
 
 mkdir -p "$DATA_DIR"
