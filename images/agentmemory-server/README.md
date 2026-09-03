@@ -10,6 +10,7 @@ This image intentionally follows the upstream `rohitg00/agentmemory` deployment 
 - Runtime base: `node:26-slim`
 - Local embedding runtime: `@huggingface/transformers` `4.2.0`
 - Local embedding model: `Xenova/all-MiniLM-L6-v2` (`q8`, 384 dimensions)
+- Published architecture: `linux/amd64` (the RHEL EC2 deployment target)
 
 The Dockerfile uses the official `iiidev/iii` image as a build stage and copies `/app/iii` into the final AgentMemory image, matching upstream. AgentMemory itself is installed from npm at build time.
 
