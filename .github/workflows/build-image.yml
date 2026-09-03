@@ -38,6 +38,13 @@ on:
         required: false
         default: ""
         type: string
+      # Run the direct smoke command in a network-disabled container. This is
+      # separate from smoke_env because health checks need the normal Docker
+      # network/port-publishing path to reach the service.
+      smoke_network_disabled:
+        required: false
+        default: false
+        type: boolean
       # Wall-clock budget for the whole `docker run` smoke invocation. Images
       # whose smoke test only starts a process and exits are fine on the 15s
       # default; images that boot a server and exercise it (headroom-mcp loads
@@ -366,12 +373,17 @@ jobs:
         env:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
+          SMOKE_NETWORK_DISABLED: ${{ inputs.smoke_network_disabled }}
           SMOKE_COMMAND: ${{ inputs.smoke_command }}
           SMOKE_TIMEOUT: ${{ inputs.smoke_timeout }}
         run: |
           set -euo pipefail
           IFS=',' read -r -a SMOKE_ARGS <<< "$SMOKE_COMMAND"
-          timeout "$SMOKE_TIMEOUT" docker run --rm $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
+          network_args=()
+          if [ "$SMOKE_NETWORK_DISABLED" = "true" ]; then
+            network_args+=(--network none)
+          fi
+          timeout "$SMOKE_TIMEOUT" docker run --rm "${network_args[@]}" $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Run health smoke test
         if: inputs.smoke_healthcheck
