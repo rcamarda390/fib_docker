@@ -26,10 +26,14 @@ RUN apk upgrade --no-cache \
 
 COPY --from=source --chown=node:node /src/archify /opt/archify
 
+# Archify runs directly on Node and has no runtime npm dependency. Remove npm
+# after the checks below so its bundled transitive packages are not shipped.
 RUN ln -s /opt/archify/bin/archify.mjs /usr/local/bin/archify \
     && node /opt/archify/bin/archify.mjs doctor \
     && node /opt/archify/bin/archify.mjs validate architecture \
        /opt/archify/examples/web-app.architecture.json --quality showcase --json \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx \
+    && rm -rf /usr/local/lib/node_modules/npm \
     && mkdir -p /workspace \
     && chown node:node /workspace
 
