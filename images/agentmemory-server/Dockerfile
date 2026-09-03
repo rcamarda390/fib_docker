@@ -86,11 +86,11 @@ RUN set -eux; \
     chmod -R a-w /opt/agentmemory/models /opt/agentmemory/transformers-cache
 
 COPY --chmod=0644 transformers-offline.mjs /opt/agentmemory/transformers-offline.mjs
-COPY --chmod=0755 offline-embedding-smoke.mjs /usr/local/lib/agentmemory/offline-embedding-smoke.mjs
+COPY --chmod=0755 offline-embedding-smoke.mjs /opt/agentmemory/offline-embedding-smoke.mjs
 
 # This is deliberately a network-disabled build step. It proves the staged
 # model is sufficient before the image can be published.
-RUN --network=none node /usr/local/lib/agentmemory/offline-embedding-smoke.mjs
+RUN --network=none node /opt/agentmemory/offline-embedding-smoke.mjs
 
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/agentmemory-entrypoint.sh
 
