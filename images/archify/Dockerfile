@@ -17,12 +17,14 @@ FROM node:22-alpine
 ARG ARCHIFY_VERSION
 ARG ARCHIFY_COMMIT
 
-# Chromium enables Archify's visual-check command inside the image. All skill,
-# renderer, schema, and example assets are copied in at build time so normal
-# operation does not need a package registry or the upstream repository.
+# Archify's core CLI has no runtime browser dependency. Keep optional
+# visual-check outside this image so Alpine Chromium cannot pull FFmpeg or
+# ship its transitive browser dependencies.
 RUN apk upgrade --no-cache \
-    && apk add --no-cache chromium \
-    && test -x /usr/bin/chromium-browser
+    && if apk info | grep -Eq '^(chromium|ffmpeg)(-|$)'; then \
+         echo "Chromium/FFmpeg packages must not be present in the Archify runtime" >&2; \
+         exit 1; \
+       fi
 
 COPY --from=source --chown=node:node /src/archify /opt/archify
 
@@ -37,9 +39,7 @@ RUN ln -s /opt/archify/bin/archify.mjs /usr/local/bin/archify \
     && mkdir -p /workspace \
     && chown node:node /workspace
 
-ENV ARCHIFY_CHROME=/usr/bin/chromium-browser \
-    ARCHIFY_CHROME_NO_SANDBOX=1 \
-    ARCHIFY_UPDATE_CHECK_DISABLED=1
+ENV ARCHIFY_UPDATE_CHECK_DISABLED=1
 
 WORKDIR /workspace
 USER node
