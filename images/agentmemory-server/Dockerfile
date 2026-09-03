@@ -23,8 +23,15 @@ LABEL org.opencontainers.image.title="agentmemory" \
       agentmemory.transformers-version="${TRANSFORMERS_VERSION}" \
       agentmemory.model-revision="${TRANSFORMERS_MODEL_REVISION}"
 
+# The AgentMemory runtime uses sh, node, openssl, gosu, and coreutils; it
+# never invokes Perl. Debian Trixie currently ships perl-base 5.40.1-6 with
+# the Xray-reported CVEs and no Trixie fix version. Remove the unused package
+# after all apt work, then fail the build if it remains installed.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates tini gosu curl \
+ && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
+ && test "$(dpkg-query -W -f='${Status}' perl-base 2>/dev/null || true)" != "install ok installed" \
+ && ! command -v perl \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=iii-image /app/iii /usr/local/bin/iii
