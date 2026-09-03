@@ -360,6 +360,12 @@ publish immutable tag
 
 Preserve this separation.
 
+### Image platform policy
+
+All images published by this repository must target `linux/amd64`. This matches the air-gapped RHEL EC2 deployment and prevents unnecessary multi-architecture manifest lists.
+
+The shared `.github/workflows/build-image.yml` default and every image-specific caller workflow must use `linux/amd64`. Do not add `arm64` or multi-architecture publication unless the deployment owner explicitly approves a documented exception.
+
 Do not duplicate shared build logic without need, create competing publish workflows, publish before validation, hide scanner output, disable a blocking scan merely to pass, or expand scope into unrelated CI hardening unless requested.
 
 ## Failed build handling
