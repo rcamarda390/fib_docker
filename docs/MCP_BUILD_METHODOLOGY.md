@@ -13,6 +13,11 @@ increment and commit the image revision. When `upstream_version` changes, the
 revision resets to `1`; pull request validation builds do not consume
 revisions. Image-specific Docker build arguments are also defined there.
 
+All repository images are published for `linux/amd64` only, matching the
+air-gapped RHEL EC2 deployment. The shared `build-image.yml` default and
+image-specific caller workflows enforce this. Do not add `arm64` or
+multi-architecture publication without explicit deployment-owner approval.
+
 `agentmemory` is built from `images/agentmemory-server/`: agentmemory and its
 compatible `iii` engine binary are bundled into one image, there is no
 separate `iii-engine` image or workflow. `images/agentmemory-server/image.yaml`'s
