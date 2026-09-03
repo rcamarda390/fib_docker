@@ -49,7 +49,6 @@ jobs:
           #                 release to chase — do not bump it just because a
           #                 newer iii-hq/iii tag exists.
           IMAGES=(
-            "archify|tt-a1i/archify|v|ARCHIFY_COMMIT"
             "bifrost-mcp|maximhq/bifrost|transports/v|BIFROST_COMMIT"
             "headroom-mcp|headroomlabs-ai/headroom|v|HEADROOM_COMMIT"
             "sqz-mcp|ojuschugh1/sqz|v|SQZ_COMMIT"

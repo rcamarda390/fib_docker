@@ -1,9 +1,0 @@
-name: archify
-upstream_version: 2.16.0
-revision: 1
-build_args:
-  ARCHIFY_COMMIT: "c826e6c3a7abad19c0f3cd1ca57207d54b1ad8de"
-publish:
-  ghcr: true
-  dockerhub: true
-  latest: false
