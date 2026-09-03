@@ -27,7 +27,10 @@ jobs:
       config: images/agentmemory-server/image.yaml
       version_arg: AGENTMEMORY_VERSION
       revision_arg: AGENTMEMORY_IMAGE_VERSION
-      run_smoke_test: false
+      run_smoke_test: true
+      smoke_command: --offline-embedding-test
+      smoke_network_disabled: true
+      smoke_timeout: 120
       smoke_healthcheck: true
       smoke_healthcheck_port: 3111
       smoke_healthcheck_path: /agentmemory/livez
