@@ -5,11 +5,23 @@ FROM iiidev/iii:${III_VERSION} AS iii-image
 FROM node:26-slim
 
 ARG AGENTMEMORY_VERSION=0.9.29
+ARG AGENTMEMORY_IMAGE_VERSION=v1
 ARG III_VERSION=0.11.2
 ARG III_SDK_VERSION=0.11.2
 ARG TRANSFORMERS_VERSION=4.2.0
 ARG TRANSFORMERS_MODEL_REVISION=751bff37182d3f1213fa05d7196b954e230abad9
 ARG TRANSFORMERS_MODEL_ID=Xenova/all-MiniLM-L6-v2
+
+LABEL org.opencontainers.image.title="agentmemory" \
+      org.opencontainers.image.version="${AGENTMEMORY_VERSION}-${AGENTMEMORY_IMAGE_VERSION}" \
+      org.opencontainers.image.description="Combined AgentMemory and iii runtime with offline local embeddings" \
+      agentmemory.version="${AGENTMEMORY_VERSION}" \
+      agentmemory.iii-version="${III_VERSION}" \
+      agentmemory.embedding-provider="local" \
+      agentmemory.embedding-model="${TRANSFORMERS_MODEL_ID}" \
+      agentmemory.embedding-dimensions="384" \
+      agentmemory.transformers-version="${TRANSFORMERS_VERSION}" \
+      agentmemory.model-revision="${TRANSFORMERS_MODEL_REVISION}"
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates tini gosu curl \
