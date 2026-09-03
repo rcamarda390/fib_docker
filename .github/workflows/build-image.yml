@@ -22,9 +22,11 @@ on:
         required: false
         default: ""
         type: string
+      # All published images target the air-gapped RHEL EC2 deployment.
+      # Override only with explicit approval for a documented exception.
       platforms:
         required: false
-        default: linux/amd64,linux/arm64
+        default: linux/amd64
         type: string
       timeout_minutes:
         required: false
