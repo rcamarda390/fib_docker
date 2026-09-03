@@ -32,6 +32,8 @@ jobs:
       config: images/agentmemory-server/image.yaml
       version_arg: AGENTMEMORY_VERSION
       revision_arg: AGENTMEMORY_IMAGE_VERSION
+      # Target the x86_64 RHEL EC2 deployment; avoid publishing a multi-arch manifest list.
+      platforms: linux/amd64
       run_smoke_test: true
       smoke_command: --offline-embedding-test
       smoke_network_disabled: true
