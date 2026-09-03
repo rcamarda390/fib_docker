@@ -20,6 +20,11 @@ HMAC_FILE="${AGENTMEMORY_HMAC_FILE:-/data/.hmac}"
 RUN_AS="node:node"
 III_CONFIG="/opt/agentmemory/node_modules/@agentmemory/agentmemory/dist/iii-config.yaml"
 
+if [ "${1:-}" = "--offline-embedding-test" ]; then
+  shift
+  exec gosu "$RUN_AS" node /usr/local/lib/agentmemory/offline-embedding-smoke.mjs "$@"
+fi
+
 mkdir -p "$DATA_DIR"
 chown -R "$RUN_AS" "$DATA_DIR"
 
@@ -85,9 +90,8 @@ if [ ! -s "$HMAC_FILE" ]; then
   chown "$RUN_AS" "$HMAC_FILE"
   echo "================================================================"
   echo "agentmemory: generated HMAC secret on first boot"
-  echo "AGENTMEMORY_SECRET=$SECRET"
-  echo "Copy this value now. It will not be printed again."
-  echo "Stored at: $HMAC_FILE (chmod 600)"
+  echo "Stored at protected path: $HMAC_FILE (chmod 600)"
+  echo "Read it from the persistent volume; it is never printed to logs."
   echo "To rotate: delete $HMAC_FILE on the persistent volume and restart."
   echo "================================================================"
 fi
