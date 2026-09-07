@@ -1,8 +1,8 @@
 name: bifrost-mcp
-upstream_version: 2.0.0
+upstream_version: helm-chart-v2.1.38
 revision: 9
 build_args:
-  BIFROST_COMMIT: e4a30d6041c0446603aea615bc5da340dac001b1
+  BIFROST_COMMIT: 7aaec805273f008b00e8ec9909c06066dad8a293
 publish:
   ghcr: true
   dockerhub: true
