@@ -2,10 +2,10 @@
 # ============================================================
 # zeus-dev-image -- base image candidate
 # ============================================================
-# Builds a UBI9/Python 3.11 base image plus the additional tooling your
-# build_image.sh process drops into files/ (agentmemory-mcp, cline,
-# claude-code, archify, gitlab-server-node-modules, the Airflow wheel, and
-# sqlfluff). Built here (public GitHub Actions) because the real target
+# Builds a UBI9/Python 3.11 base image and installs additional tooling from
+# public upstream sources (AgentMemory, Cline, Claude Code,
+# Archify, Airflow, SQLFluff, and GitLab MCP dependencies). Built here
+# (public GitHub Actions) because the real target
 # base -- artifactory.<redacted>/beds-docker/beds-ubi9-python3.11 -- is
 # air-gapped and unreachable from this runner. You import the published
 # candidate into artifactory yourself, Xray it, and promote it to replace
@@ -20,10 +20,36 @@
 # Build command: docker build --no-cache -t zeus-dev-image:external .
 # Run command:   docker run --rm -it zeus-dev-image:external /bin/bash
 
+# ============================================================
+# Archify CLI source -- fetch the exact commit without carrying Git metadata
+# into the final image.
+# ============================================================
+ARG ARCHIFY_COMMIT=06dd052602dd9a369e4d034e24faef0917b5a60c
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e688dd4a5019afde11 AS archify-source
+ARG ARCHIFY_COMMIT
+RUN apk add --no-cache ca-certificates git \
+    && git init /src \
+    && git -C /src remote add origin https://github.com/tt-a1i/archify.git \
+    && n=0; until [ "$n" -ge 5 ]; do \
+        git -C /src fetch --depth 1 origin "$ARCHIFY_COMMIT" \
+            && git -C /src checkout --detach FETCH_HEAD && break; \
+        n=$((n + 1)); \
+        echo "git fetch failed (attempt $n/5), retrying..."; \
+        sleep $((n * 3)); \
+    done \
+    && test "$(git -C /src rev-parse HEAD)" = "$ARCHIFY_COMMIT"
+
+# ============================================================
+# Final image
+# ============================================================
 # ponytail: base image uses the mutable `:latest` tag, matching the internal
 # build. Pin to a digest if this image needs to stop tracking upstream UBI9
 # security updates automatically.
 FROM registry.access.redhat.com/ubi9/python-311:latest
+
+# The UBI base defaults to UID 1001. Build layers need root to install OS
+# packages and write under /etc, /opt, and /usr/local.
+USER 0
 
 # This image is a composite base image, not a build of one upstream
 # project, so there is no single "upstream_version" to track. This ARG is
@@ -46,20 +72,16 @@ ARG BUILD_MODE=test
 # Airflow runtime directories
 # ============================================================
 ENV AIRFLOW_HOME=/opt/airflow
-
-# ============================================================
-# Add useful shell aliases
-# ============================================================
-RUN echo "alias ll='ls -alF'" > /etc/profile.d/aliases.sh
+ENV ARCHIFY_UPDATE_CHECK_DISABLED=1
 
 # ============================================================
 # Install OS packages
 # ============================================================
-# nodejs:20 module enabled explicitly -- without this, plain `npm`/`nodejs`
+# nodejs:22 module enabled explicitly -- without this, plain `npm`/`nodejs`
 # package names resolve to whatever the default module stream is for the
-# base image's RHEL9 AppStream, not necessarily 20.x.
+# base image's RHEL9 AppStream, not necessarily 22.x.
 RUN dnf -y module enable postgresql:15 \
-    && dnf -y module enable nodejs:20 \
+    && dnf -y module enable nodejs:22 \
     && dnf install -y \
         vim \
         vi \
@@ -81,8 +103,8 @@ RUN dnf -y module enable postgresql:15 \
     && node --version \
     && npm --version \
     && case "$(node --version)" in \
-        v20.*) echo "OK: Node.js 20.x confirmed" ;; \
-        *) echo "ERROR: Expected Node.js v20.x, got $(node --version)"; exit 1 ;; \
+        v22.*) echo "OK: Node.js 22.x confirmed" ;; \
+        *) echo "ERROR: Expected Node.js v22.x, got $(node --version)"; exit 1 ;; \
     esac
 
 # ============================================================
@@ -187,39 +209,17 @@ RUN npm install -g pyright \
     || echo "WARNING: pyright not available in registry, continuing build"
 
 # ============================================================
-# Additional packages from files/ (populated by build_image.sh)
+# Source-installed tools
 # ============================================================
-# files/ is empty in this repo. Your build_image.sh process copies the
-# real tarballs/wheels in before `docker build` runs; this step no-ops
-# gracefully when it finds nothing (e.g. this repo's own CI sanity build),
-# so BUILD_MODE=test still passes with a warning from verify-installation.sh
-# rather than failing the Docker build outright.
-COPY files/ /opt/files/
-COPY preload/ /opt/preload/
 
 # ============================================================
-# Apache Airflow -- wheel only (apache_airflow-2.11.0-py3-none-any.whl),
-# constrained by the supplied constraints-airflow.txt. Falls back to public
-# PyPI when files/ doesn't carry them (this repo's own CI sanity build).
+# Apache Airflow 2.11.0 from public PyPI, constrained for Python 3.11.
 # ============================================================
 RUN set -eux; \
-    WHEEL=/opt/files/apache_airflow-2.11.0-py3-none-any.whl; \
-    CONSTRAINTS=/opt/files/constraints-airflow.txt; \
-    if [ ! -f "$CONSTRAINTS" ]; then \
-        CONSTRAINTS=/tmp/constraints-airflow.txt; \
-        curl -fsSL -o "$CONSTRAINTS" \
-            https://raw.githubusercontent.com/apache/airflow/constraints-2.11.0/constraints-3.11.txt; \
-    fi; \
-    \
-    echo "=== Installing Apache Airflow 2.11.0 ==="; \
-    if [ -f "$WHEEL" ]; then \
-        pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" "$WHEEL"; \
-    else \
-        echo "WARNING: $WHEEL not found, falling back to public PyPI"; \
-        pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" apache-airflow==2.11.0; \
-    fi; \
-    \
-    echo "=== Installing Airflow provider packages from public PyPI ==="; \
+    CONSTRAINTS=/tmp/constraints-airflow.txt; \
+    curl -fsSL -o "$CONSTRAINTS" \
+        https://raw.githubusercontent.com/apache/airflow/constraints-2.11.0/constraints-3.11.txt; \
+    pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" apache-airflow==2.11.0; \
     pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" \
         apache-airflow-providers-common-compat \
         apache-airflow-providers-common-io \
@@ -228,25 +228,14 @@ RUN set -eux; \
         apache-airflow-providers-http \
         apache-airflow-providers-imap \
         apache-airflow-providers-smtp \
-        apache-airflow-providers-sqlite; \
-    \
-    echo "=== Installing pinned Airflow provider packages ==="; \
-    pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" \
+        apache-airflow-providers-sqlite \
         apache-airflow-providers-amazon \
         apache-airflow-providers-ssh; \
-    pip3 install --no-input --no-cache-dir --no-deps \
-        apache-airflow-providers-fab==1.5.3; \
-    \
-    rm -f /tmp/constraints-airflow.txt; \
-    echo "=== Apache Airflow installation complete ==="; \
+    pip3 install --no-input --no-cache-dir --no-deps apache-airflow-providers-fab==1.5.3; \
+    rm -f "$CONSTRAINTS"; \
     installed_version=$(python3 -c "import airflow; print(airflow.__version__)"); \
-    echo "Installed Airflow version: $installed_version"; \
-    if [ "$installed_version" != "2.11.0" ]; then \
-        echo "ERROR: Expected Airflow 2.11.0, got $installed_version"; \
-        exit 1; \
-    fi; \
+    test "$installed_version" = "2.11.0"; \
     python3 -c "from airflow.providers.fab import __version__; print('FAB version:', __version__)"
-
 # ============================================================
 # Python dependencies
 # ============================================================
@@ -269,13 +258,7 @@ RUN set -eux; \
         html2text==2025.4.15 \
         markdown-it-py==3.0.0; \
     \
-    SQLFLUFF=/opt/files/sqlfluff-4.1.0-py3-none-any.whl; \
-    if [ -f "$SQLFLUFF" ]; then \
-        pip3 install --no-input --no-cache-dir "$SQLFLUFF"; \
-    else \
-        echo "WARNING: $SQLFLUFF not found, falling back to public PyPI"; \
-        pip3 install --no-input --no-cache-dir sqlfluff==4.1.0; \
-    fi; \
+    pip3 install --no-input --no-cache-dir sqlfluff==4.1.0; \
     \
     pip3 install --no-input --no-cache-dir \
         botocore==1.43.54 \
@@ -290,91 +273,57 @@ RUN set -eux; \
     rm -rf /root/.cache /tmp/* /var/tmp/*
 
 # ============================================================
-# Remaining packages from files/: agentmemory-mcp, cline, claude-code,
-# archify, gitlab-server-node-modules. sqz and *.vsix are skipped -- see
-# README.md.
+# Source-installed Node.js tools
 # ============================================================
+# Install packages directly from their public npm sources. The internal
+# air-gapped Dockerfile consumes the resulting commands and paths; it does
+# not need the original artifact files.
 RUN set -eux; \
-    cd /opt; \
-    if [ ! -d files ]; then \
-        echo "No files/ directory found. Skipping tarball installation."; \
-        exit 0; \
-    fi; \
-    \
-    for tarball in files/*.tar.gz files/*.tar; do \
-        [ -e "$tarball" ] || continue; \
-        tarball_name=$(basename "$tarball"); \
-        case "$tarball_name" in \
-            sqz-*|*.vsix) \
-                echo "Skipping $tarball_name (not used in this image)"; \
-                continue ;; \
-            agentmemory-mcp-*.tar.gz) \
-                echo "Extracting $tarball_name to /opt/agentmemory/"; \
-                mkdir -p /opt/agentmemory; \
-                tar xzf "$tarball" -C /opt/agentmemory; \
-                continue ;; \
-        esac; \
-        echo "Processing tarball: $tarball_name"; \
-        cp "$tarball" /tmp/; \
-        cd /tmp; \
-        case "$tarball_name" in \
-            *.tar.gz) tar xzf "$tarball_name" ;; \
-            *.tar) tar xf "$tarball_name" ;; \
-        esac; \
-        rm -f "/tmp/$tarball_name"; \
-        if [ -d node_modules ] || [ -d package ]; then \
-            echo "Detected Node.js package structure"; \
-            if [ -d node_modules ]; then \
-                if [ ! -d /opt/node_modules ]; then \
-                    mv node_modules /opt/; \
-                else \
-                    cp -r node_modules/. /opt/node_modules/; \
-                    rm -rf node_modules; \
-                fi; \
-            fi; \
-            if [ -d package ]; then \
-                mv -n package /opt/ 2>/dev/null || true; \
-            fi; \
-        else \
-            echo "Generic tarball - extracting to /opt"; \
-            for item in *; do \
-                [ -e "$item" ] && mv -n "$item" /opt/ 2>/dev/null || true; \
-            done; \
-        fi; \
-        cd /opt; \
-    done; \
-    \
-    echo "--- Setting up CLI symlinks ---"; \
-    if [ -d /opt/node_modules/.bin ]; then \
-        for cli in /opt/node_modules/.bin/*; do \
-            [ -x "$cli" ] || continue; \
-            ln -sf "$cli" /usr/local/bin/"$(basename "$cli")"; \
-        done; \
-    fi; \
-    echo "--- Setting up symlinks for generic /opt binaries ---"; \
-    for bin in /opt/*; do \
-        [ -f "$bin" ] && [ -x "$bin" ] || continue; \
-        ln -sf "$bin" /usr/local/bin/"$(basename "$bin")"; \
-    done; \
-    \
-    npm cache clean --force || true; \
-    rm -rf /root/.cache /tmp/* /var/tmp/*; \
-    echo "=== Tarball installation complete ==="
+    npm install --prefix /opt/agentmemory @agentmemory/agentmemory@0.9.29; \
+    npm install --prefix /opt/agentmemory-mcp --omit=dev @agentmemory/mcp@0.9.29; \
+    ln -sf /opt/agentmemory/node_modules/.bin/agentmemory /usr/local/bin/agentmemory; \
+    ln -sf /opt/agentmemory-mcp/node_modules/@agentmemory/mcp/bin.mjs /usr/local/bin/agentmemory-mcp; \
+    npm install -g cline@3.0.60; \
+    npm install -g @anthropic-ai/claude-code@2.1.252; \
+    cline --version; \
+    claude --version
 
 # ============================================================
-# Claude Code wrapper: unset AWS_PROFILE for Bedrock/IMDS auth (scoped fix
-# -- do NOT change the global AWS_PROFILE=PDEVELOPER env, other tooling
-# depends on it).
+# GitLab MCP server dependencies
 # ============================================================
-RUN if [ -f /opt/claude ]; then \
-        echo "--- Installing Claude wrapper to unset AWS_PROFILE ---"; \
-        rm -f /usr/local/bin/claude; \
-        printf '#!/bin/sh\n\nexec env -u AWS_PROFILE /opt/claude "$@"\n' > /usr/local/bin/claude; \
-        chmod +x /usr/local/bin/claude; \
-        echo "OK: Claude wrapper installed at /usr/local/bin/claude"; \
-    else \
-        echo "Claude wrapper not applicable - /opt/claude not found"; \
-    fi
+# Recreate the node_modules bundle described by the internal build:
+# @modelcontextprotocol/sdk, axios, TypeScript, and Node.js types.
+RUN set -eux; \
+    npm install --prefix /opt/gitlab-mcp-server --legacy-peer-deps \
+        @modelcontextprotocol/sdk@1.29.0 \
+        axios@1.16.0 \
+        @types/node \
+        typescript; \
+    test -d /opt/gitlab-mcp-server/node_modules/@modelcontextprotocol/sdk; \
+    test -d /opt/gitlab-mcp-server/node_modules/axios; \
+    test -x /opt/gitlab-mcp-server/node_modules/.bin/tsc
+
+# ============================================================
+# Archify CLI (vendored from the pinned upstream commit)
+# ============================================================
+COPY --from=archify-source /src/archify/ /opt/archify/
+RUN ln -sf /opt/archify/bin/archify.mjs /usr/local/bin/archify \
+    && chmod +x /opt/archify/bin/archify.mjs \
+    && archify --help >/dev/null \
+    && archify_version="$(node -p "require('/opt/archify/package.json').version")" \
+    && echo "Archify version: ${archify_version}" \
+    && test "${archify_version}" = "2.17.0-dev.1"
+
+# ============================================================
+# Claude Code wrapper: unset AWS_PROFILE for Bedrock/IMDS auth without
+# changing the global AWS_PROFILE other tooling depends on.
+# ============================================================
+RUN set -eux; \
+    real_claude="$(command -v claude)"; \
+    mv "$real_claude" "${real_claude}.real"; \
+    printf '#!/bin/sh\n\nexec env -u AWS_PROFILE "%s.real" "$@"\n' "$real_claude" > "$real_claude"; \
+    chmod +x "$real_claude"; \
+    claude --version
 
 # ============================================================
 # Install jirashell CLI wrapper
@@ -448,5 +397,6 @@ EXPOSE 5439
 # Default workdir and entrypoint
 # ============================================================
 WORKDIR /opt/airflow
+USER 1001
 ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]
 CMD ["tail", "-f", "/dev/null"]

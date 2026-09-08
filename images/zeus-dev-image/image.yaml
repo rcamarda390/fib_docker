@@ -1,6 +1,8 @@
 name: zeus-dev-image
 upstream_version: 1.0.0
 revision: 1
+build_args:
+  ARCHIFY_COMMIT: 06dd052602dd9a369e4d034e24faef0917b5a60c
 publish:
   ghcr: true
   dockerhub: true
