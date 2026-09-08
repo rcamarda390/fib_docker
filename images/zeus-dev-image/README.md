@@ -18,7 +18,7 @@ This image installs its tools from public upstream sources during the GitHub Act
 ## What's in it
 
 - Base: `registry.access.redhat.com/ubi9/python-311:latest`
-- Runtimes: Python 3.11, Node.js 20, PostgreSQL 15 client
+- Runtimes: Python 3.11, Node.js 22, PostgreSQL 15 client
 - Apache Airflow `2.11.0` installed from `files/apache_airflow-2.11.0-py3-none-any.whl`
   (constrained by `files/constraints-airflow.txt`) plus the FTP/HTTP/IMAP/
   SMTP/SQLite/common/Amazon/SSH/FAB providers from public PyPI
