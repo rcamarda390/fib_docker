@@ -25,7 +25,7 @@
 # into the final image.
 # ============================================================
 ARG ARCHIFY_COMMIT=06dd052602dd9a369e4d034e24faef0917b5a60c
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e688dd4a5019afde11 AS archify-source
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS archify-source
 ARG ARCHIFY_COMMIT
 RUN apk add --no-cache ca-certificates git \
     && git init /src \
