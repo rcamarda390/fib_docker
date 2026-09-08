@@ -25,6 +25,7 @@
 # into the final image.
 # ============================================================
 ARG ARCHIFY_COMMIT=06dd052602dd9a369e4d034e24faef0917b5a60c
+ARG XDG_USER_DIRS_COMMIT=cd05b6d29da1abdb3cd253ef496ae7fd1593e4bb
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS archify-source
 ARG ARCHIFY_COMMIT
 RUN apk add --no-cache ca-certificates git \
@@ -38,6 +39,31 @@ RUN apk add --no-cache ca-certificates git \
         sleep $((n * 3)); \
     done \
     && test "$(git -C /src rev-parse HEAD)" = "$ARCHIFY_COMMIT"
+
+# ============================================================
+# xdg-user-dirs source -- UBI9 does not package xdg-user-dirs
+# ============================================================
+# xdg-user-dir is a small standalone program used by Cline hooks and other
+# user-directory-aware tooling. Build only that upstream command in a UBI9
+# stage so it remains compatible with the final glibc-based image.
+FROM registry.access.redhat.com/ubi9/python-311:latest AS xdg-user-dirs-source
+ARG XDG_USER_DIRS_COMMIT
+RUN dnf install -y gcc git \
+    && python3 -m pip install --no-cache-dir meson==1.10.0 ninja==1.13.0 \
+    && git init /src \
+    && git -C /src remote add origin https://gitlab.freedesktop.org/xdg/xdg-user-dirs.git \
+    && n=0; until [ "$n" -ge 5 ]; do \
+        git -C /src fetch --depth 1 origin "$XDG_USER_DIRS_COMMIT" \
+            && git -C /src checkout --detach FETCH_HEAD && break; \
+        n=$((n + 1)); \
+        echo "git fetch failed (attempt $n/5), retrying..."; \
+        sleep $((n * 3)); \
+    done \
+    && test "$(git -C /src rev-parse HEAD)" = "$XDG_USER_DIRS_COMMIT" \
+    && meson setup /build /src --prefix=/usr/local -Ddocs=false -Dnls=false \
+    && meson compile -C /build xdg-user-dir \
+    && install -D -m 0755 /build/src/xdg-user-dir /out/usr/local/bin/xdg-user-dir \
+    && test "$(HOME=/tmp/xdg-user-dirs-test /out/usr/local/bin/xdg-user-dir DOCUMENTS)" = /tmp/xdg-user-dirs-test
 
 # ============================================================
 # Final image
@@ -104,7 +130,6 @@ RUN dnf install -y \
         jq \
         tar \
         postgresql15 \
-        xdg-user-dirs \
     && dnf clean all \
     && rm -rf /var/cache/dnf /var/cache/yum /tmp/* /var/tmp/* \
     && echo "=== Verifying Node.js version ===" \
@@ -118,6 +143,9 @@ RUN dnf install -y \
         'psql (PostgreSQL) 15.'*) echo "OK: PostgreSQL 15.x client confirmed" ;; \
         *) echo "ERROR: Expected PostgreSQL 15.x client, got $(psql --version)"; exit 1 ;; \
     esac
+
+COPY --from=xdg-user-dirs-source /out/usr/local/bin/xdg-user-dir /usr/local/bin/xdg-user-dir
+RUN test "$(HOME=/tmp/xdg-user-dirs-test xdg-user-dir DOCUMENTS)" = /tmp/xdg-user-dirs-test
 
 # ============================================================
 # Optional convenience packages (not in every UBI9 AppStream/BaseOS repo
