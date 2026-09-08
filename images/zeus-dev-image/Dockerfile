@@ -20,6 +20,28 @@
 # Build command: docker build --no-cache -t zeus-dev-image:external .
 # Run command:   docker run --rm -it zeus-dev-image:external /bin/bash
 
+# ============================================================
+# Archify CLI source -- fetch the exact commit without carrying Git metadata
+# into the final image.
+# ============================================================
+ARG ARCHIFY_COMMIT=06dd052602dd9a369e4d034e24faef0917b5a60c
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e688dd4a5019afde11 AS archify-source
+ARG ARCHIFY_COMMIT
+RUN apk add --no-cache ca-certificates git \
+    && git init /src \
+    && git -C /src remote add origin https://github.com/tt-a1i/archify.git \
+    && n=0; until [ "$n" -ge 5 ]; do \
+        git -C /src fetch --depth 1 origin "$ARCHIFY_COMMIT" \
+            && git -C /src checkout --detach FETCH_HEAD && break; \
+        n=$((n + 1)); \
+        echo "git fetch failed (attempt $n/5), retrying..."; \
+        sleep $((n * 3)); \
+    done \
+    && test "$(git -C /src rev-parse HEAD)" = "$ARCHIFY_COMMIT"
+
+# ============================================================
+# Final image
+# ============================================================
 # ponytail: base image uses the mutable `:latest` tag, matching the internal
 # build. Pin to a digest if this image needs to stop tracking upstream UBI9
 # security updates automatically.
@@ -46,6 +68,7 @@ ARG BUILD_MODE=test
 # Airflow runtime directories
 # ============================================================
 ENV AIRFLOW_HOME=/opt/airflow
+ENV ARCHIFY_UPDATE_CHECK_DISABLED=1
 
 # ============================================================
 # Add useful shell aliases
@@ -291,7 +314,7 @@ RUN set -eux; \
 
 # ============================================================
 # Remaining packages from files/: agentmemory-mcp, cline, claude-code,
-# archify, gitlab-server-node-modules. sqz and *.vsix are skipped -- see
+# gitlab-server-node-modules. sqz and *.vsix are skipped -- see
 # README.md.
 # ============================================================
 RUN set -eux; \
@@ -360,6 +383,17 @@ RUN set -eux; \
     npm cache clean --force || true; \
     rm -rf /root/.cache /tmp/* /var/tmp/*; \
     echo "=== Tarball installation complete ==="
+
+# ============================================================
+# Archify CLI (vendored from the pinned upstream commit)
+# ============================================================
+COPY --from=archify-source /src/archify/ /opt/archify/
+RUN ln -sf /opt/archify/bin/archify.mjs /usr/local/bin/archify \
+    && chmod +x /opt/archify/bin/archify.mjs \
+    && archify --help >/dev/null \
+    && archify_version="$(node -p "require('/opt/archify/package.json').version")" \
+    && echo "Archify version: ${archify_version}" \
+    && test "${archify_version}" = "2.17.0-dev.1"
 
 # ============================================================
 # Claude Code wrapper: unset AWS_PROFILE for Bedrock/IMDS auth (scoped fix
