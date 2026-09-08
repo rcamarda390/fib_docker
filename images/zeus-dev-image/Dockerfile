@@ -214,23 +214,10 @@ RUN npm install -g pyright \
 # PyPI when files/ doesn't carry them (this repo's own CI sanity build).
 # ============================================================
 RUN set -eux; \
-    WHEEL=/opt/files/apache_airflow-2.11.0-py3-none-any.whl; \
-    CONSTRAINTS=/opt/files/constraints-airflow.txt; \
-    if [ ! -f "$CONSTRAINTS" ]; then \
-        CONSTRAINTS=/tmp/constraints-airflow.txt; \
-        curl -fsSL -o "$CONSTRAINTS" \
-            https://raw.githubusercontent.com/apache/airflow/constraints-2.11.0/constraints-3.11.txt; \
-    fi; \
-    \
-    echo "=== Installing Apache Airflow 2.11.0 ==="; \
-    if [ -f "$WHEEL" ]; then \
-        pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" "$WHEEL"; \
-    else \
-        echo "WARNING: $WHEEL not found, falling back to public PyPI"; \
-        pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" apache-airflow==2.11.0; \
-    fi; \
-    \
-    echo "=== Installing Airflow provider packages from public PyPI ==="; \
+    CONSTRAINTS=/tmp/constraints-airflow.txt; \
+    curl -fsSL -o "$CONSTRAINTS" \
+        https://raw.githubusercontent.com/apache/airflow/constraints-2.11.0/constraints-3.11.txt; \
+    pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" apache-airflow==2.11.0; \
     pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" \
         apache-airflow-providers-common-compat \
         apache-airflow-providers-common-io \
@@ -239,25 +226,14 @@ RUN set -eux; \
         apache-airflow-providers-http \
         apache-airflow-providers-imap \
         apache-airflow-providers-smtp \
-        apache-airflow-providers-sqlite; \
-    \
-    echo "=== Installing pinned Airflow provider packages ==="; \
-    pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" \
+        apache-airflow-providers-sqlite \
         apache-airflow-providers-amazon \
         apache-airflow-providers-ssh; \
-    pip3 install --no-input --no-cache-dir --no-deps \
-        apache-airflow-providers-fab==1.5.3; \
-    \
-    rm -f /tmp/constraints-airflow.txt; \
-    echo "=== Apache Airflow installation complete ==="; \
+    pip3 install --no-input --no-cache-dir --no-deps apache-airflow-providers-fab==1.5.3; \
+    rm -f "$CONSTRAINTS"; \
     installed_version=$(python3 -c "import airflow; print(airflow.__version__)"); \
-    echo "Installed Airflow version: $installed_version"; \
-    if [ "$installed_version" != "2.11.0" ]; then \
-        echo "ERROR: Expected Airflow 2.11.0, got $installed_version"; \
-        exit 1; \
-    fi; \
+    test "$installed_version" = "2.11.0"; \
     python3 -c "from airflow.providers.fab import __version__; print('FAB version:', __version__)"
-
 # ============================================================
 # Python dependencies
 # ============================================================
@@ -280,13 +256,7 @@ RUN set -eux; \
         html2text==2025.4.15 \
         markdown-it-py==3.0.0; \
     \
-    SQLFLUFF=/opt/files/sqlfluff-4.1.0-py3-none-any.whl; \
-    if [ -f "$SQLFLUFF" ]; then \
-        pip3 install --no-input --no-cache-dir "$SQLFLUFF"; \
-    else \
-        echo "WARNING: $SQLFLUFF not found, falling back to public PyPI"; \
-        pip3 install --no-input --no-cache-dir sqlfluff==4.1.0; \
-    fi; \
+    pip3 install --no-input --no-cache-dir sqlfluff==4.1.0; \
     \
     pip3 install --no-input --no-cache-dir \
         botocore==1.43.54 \
@@ -332,8 +302,7 @@ RUN set -eux; \
     test -x /opt/gitlab-mcp-server/node_modules/.bin/tsc
 
 # ============================================================
-# Archify CLI (vendored from the pinned upstream commit)
-# ============================================================
+# Archify CLI# ============================================================
  (vendored from the pinned upstream commit)
 # ============================================================
 COPY --from=archify-source /src/archify/ /opt/archify/
