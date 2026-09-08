@@ -205,15 +205,8 @@ RUN npm install -g pyright \
     || echo "WARNING: pyright not available in registry, continuing build"
 
 # ============================================================
-# Additional packages from files/ (populated by build_image.sh)
+# Source-installed tools
 # ============================================================
-# files/ is empty in this repo. Your build_image.sh process copies the
-# real tarballs/wheels in before `docker build` runs; this step no-ops
-# gracefully when it finds nothing (e.g. this repo's own CI sanity build),
-# so BUILD_MODE=test still passes with a warning from verify-installation.sh
-# rather than failing the Docker build outright.
-COPY files/ /opt/files/
-COPY preload/ /opt/preload/
 
 # ============================================================
 # Apache Airflow -- wheel only (apache_airflow-2.11.0-py3-none-any.whl),
@@ -308,79 +301,40 @@ RUN set -eux; \
     rm -rf /root/.cache /tmp/* /var/tmp/*
 
 # ============================================================
-# Remaining packages from files/: agentmemory-mcp, cline, claude-code,
-# gitlab-server-node-modules. sqz and *.vsix are skipped -- see
-# README.md.
+# Source-installed Node.js tools
 # ============================================================
+# Install packages directly from their public npm sources. The internal
+# air-gapped Dockerfile consumes the resulting commands and paths; it does
+# not need the original artifact files.
 RUN set -eux; \
-    cd /opt; \
-    if [ ! -d files ]; then \
-        echo "No files/ directory found. Skipping tarball installation."; \
-        exit 0; \
-    fi; \
-    \
-    for tarball in files/*.tar.gz files/*.tar; do \
-        [ -e "$tarball" ] || continue; \
-        tarball_name=$(basename "$tarball"); \
-        case "$tarball_name" in \
-            sqz-*|*.vsix) \
-                echo "Skipping $tarball_name (not used in this image)"; \
-                continue ;; \
-            agentmemory-mcp-*.tar.gz) \
-                echo "Extracting $tarball_name to /opt/agentmemory/"; \
-                mkdir -p /opt/agentmemory; \
-                tar xzf "$tarball" -C /opt/agentmemory; \
-                continue ;; \
-        esac; \
-        echo "Processing tarball: $tarball_name"; \
-        cp "$tarball" /tmp/; \
-        cd /tmp; \
-        case "$tarball_name" in \
-            *.tar.gz) tar xzf "$tarball_name" ;; \
-            *.tar) tar xf "$tarball_name" ;; \
-        esac; \
-        rm -f "/tmp/$tarball_name"; \
-        if [ -d node_modules ] || [ -d package ]; then \
-            echo "Detected Node.js package structure"; \
-            if [ -d node_modules ]; then \
-                if [ ! -d /opt/node_modules ]; then \
-                    mv node_modules /opt/; \
-                else \
-                    cp -r node_modules/. /opt/node_modules/; \
-                    rm -rf node_modules; \
-                fi; \
-            fi; \
-            if [ -d package ]; then \
-                mv -n package /opt/ 2>/dev/null || true; \
-            fi; \
-        else \
-            echo "Generic tarball - extracting to /opt"; \
-            for item in *; do \
-                [ -e "$item" ] && mv -n "$item" /opt/ 2>/dev/null || true; \
-            done; \
-        fi; \
-        cd /opt; \
-    done; \
-    \
-    echo "--- Setting up CLI symlinks ---"; \
-    if [ -d /opt/node_modules/.bin ]; then \
-        for cli in /opt/node_modules/.bin/*; do \
-            [ -x "$cli" ] || continue; \
-            ln -sf "$cli" /usr/local/bin/"$(basename "$cli")"; \
-        done; \
-    fi; \
-    echo "--- Setting up symlinks for generic /opt binaries ---"; \
-    for bin in /opt/*; do \
-        [ -f "$bin" ] && [ -x "$bin" ] || continue; \
-        ln -sf "$bin" /usr/local/bin/"$(basename "$bin")"; \
-    done; \
-    \
-    npm cache clean --force || true; \
-    rm -rf /root/.cache /tmp/* /var/tmp/*; \
-    echo "=== Tarball installation complete ==="
+    npm install --prefix /opt/agentmemory @agentmemory/agentmemory@0.9.29; \
+    npm install --prefix /opt/agentmemory-mcp --omit=dev @agentmemory/mcp@0.9.29; \
+    ln -sf /opt/agentmemory/node_modules/.bin/agentmemory /usr/local/bin/agentmemory; \
+    ln -sf /opt/agentmemory-mcp/node_modules/@agentmemory/mcp/bin.mjs /usr/local/bin/agentmemory-mcp; \
+    npm install -g cline@3.0.60; \
+    npm install -g @anthropic-ai/claude-code@2.1.252; \
+    cline --version; \
+    claude --version
+
+# ============================================================
+# GitLab MCP server dependencies
+# ============================================================
+# Recreate the node_modules bundle described by the internal build:
+# @modelcontextprotocol/sdk, axios, TypeScript, and Node.js types.
+RUN set -eux; \
+    npm install --prefix /opt/gitlab-mcp-server --legacy-peer-deps \
+        @modelcontextprotocol/sdk@1.29.0 \
+        axios@1.16.0 \
+        @types/node \
+        typescript; \
+    test -d /opt/gitlab-mcp-server/node_modules/@modelcontextprotocol/sdk; \
+    test -d /opt/gitlab-mcp-server/node_modules/axios; \
+    test -x /opt/gitlab-mcp-server/node_modules/.bin/tsc
 
 # ============================================================
 # Archify CLI (vendored from the pinned upstream commit)
+# ============================================================
+ (vendored from the pinned upstream commit)
 # ============================================================
 COPY --from=archify-source /src/archify/ /opt/archify/
 RUN ln -sf /opt/archify/bin/archify.mjs /usr/local/bin/archify \
