@@ -1,11 +1,21 @@
 # syntax=docker/dockerfile:1.7
 # ============================================================
-# zeus-dev-image -- public-source build
+# zeus-dev-image -- base image candidate
 # ============================================================
-# Reproduces the internal zeus-dev-image dev container from public sources
-# only (npmjs.org, PyPI, GitHub, Docker Hub, Red Hat Registry). See
-# README.md for the internal -> public component mapping and what was
-# intentionally omitted.
+# Builds a UBI9/Python 3.11 base image plus the additional tooling your
+# build_image.sh process drops into files/ (agentmemory-mcp, cline,
+# claude-code, archify, gitlab-server-node-modules, the Airflow wheel, and
+# sqlfluff). Built here (public GitHub Actions) because the real target
+# base -- artifactory.<redacted>/beds-docker/beds-ubi9-python3.11 -- is
+# air-gapped and unreachable from this runner. You import the published
+# candidate into artifactory yourself, Xray it, and promote it to replace
+# that base image if it passes.
+#
+# sqz and cline-*.vsix are intentionally skipped -- see README.md.
+#
+# Everything else (users, entrypoint, jirashell/new_prompt/verify-
+# installation/agentmemory-mcp scripts) is untouched; that stays with your
+# existing downstream build.
 #
 # Build command: docker build --no-cache -t zeus-dev-image:external .
 # Run command:   docker run --rm -it zeus-dev-image:external /bin/bash
@@ -13,46 +23,15 @@
 # ponytail: base image uses the mutable `:latest` tag, matching the internal
 # build. Pin to a digest if this image needs to stop tracking upstream UBI9
 # security updates automatically.
-
-# ============================================================
-# sqz CLI -- built from the same pinned commit already vetted for the
-# sqz-mcp image in this repo (images/sqz-mcp). Reuses that image's vendored
-# Cargo.lock, which covers the whole cargo workspace (sqz-cli, sqz-engine,
-# sqz-mcp), so it applies unchanged here.
-# ============================================================
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS sqz-source
-ARG SQZ_VERSION=1.3.0
-ARG SQZ_COMMIT=d024b6b6bec152dfa7a63e2316054b1bb33a8110
-RUN apk add --no-cache ca-certificates git \
-    && git clone --depth 1 --branch "v${SQZ_VERSION}" \
-       https://github.com/ojuschugh1/sqz.git /src \
-    && test "$(git -C /src rev-parse HEAD)" = "$SQZ_COMMIT"
-
-FROM rust:1.85-alpine AS sqz-builder
-WORKDIR /build
-RUN apk add --no-cache musl-dev
-COPY --from=sqz-source /src/ .
-# See images/sqz-mcp/Dockerfile for why upstream's .cargo/config.toml has to
-# go on a musl-alpine host build.
-RUN rm -f .cargo/config.toml
-COPY Cargo.lock ./Cargo.lock
-RUN cargo build --release --locked --package sqz-cli \
-    && test -f target/release/sqz \
-    && mkdir -p /app \
-    && cp target/release/sqz /app/sqz
-
-# ============================================================
-# Final image
-# ============================================================
 FROM registry.access.redhat.com/ubi9/python-311:latest
 
-# This image is a composite dev container, not a build of one upstream
+# This image is a composite base image, not a build of one upstream
 # project, so there is no single "upstream_version" to track. This ARG is
 # the version_arg the shared build-image.yml workflow expects; it labels
 # the image with the local zeus-dev-image release number from image.yaml.
 ARG ZEUS_DEV_IMAGE_VERSION=1.0.0
 LABEL org.opencontainers.image.title="zeus-dev-image" \
-      org.opencontainers.image.description="Public-source dev container: Airflow, AWS CLI, Cline, Claude Code, AgentMemory MCP, sqz" \
+      org.opencontainers.image.description="UBI9/Python 3.11 base image candidate: Airflow, AWS CLI, Cline, Claude Code, AgentMemory MCP" \
       org.opencontainers.image.version="${ZEUS_DEV_IMAGE_VERSION}"
 
 # ============================================================
@@ -208,87 +187,40 @@ RUN npm install -g pyright \
     || echo "WARNING: pyright not available in registry, continuing build"
 
 # ============================================================
-# Extension points for future internal-only components.
+# Additional packages from files/ (populated by build_image.sh)
 # ============================================================
-# ponytail: the internal build's generic tarball auto-installer (Python
-# wheel / npm tarball / RPM sniffing) was not carried over here -- every
-# component it used to handle is now installed explicitly below via its
-# public source. If a genuinely internal-only tool (e.g. a confirmed public
-# equivalent for "archify", or GitLab server tooling) shows up later, drop
-# it in files/ or preload/ and add an explicit install step near the
-# component it replaces, rather than reintroducing a generic sniffing loop.
+# files/ is empty in this repo. Your build_image.sh process copies the
+# real tarballs/wheels in before `docker build` runs; this step no-ops
+# gracefully when it finds nothing (e.g. this repo's own CI sanity build),
+# so BUILD_MODE=test still passes with a warning from verify-installation.sh
+# rather than failing the Docker build outright.
 COPY files/ /opt/files/
 COPY preload/ /opt/preload/
 
 # ============================================================
-# AgentMemory MCP (public npm: @agentmemory/agentmemory)
+# Apache Airflow -- wheel only (apache_airflow-2.11.0-py3-none-any.whl),
+# constrained by the supplied constraints-airflow.txt. Falls back to public
+# PyPI when files/ doesn't carry them (this repo's own CI sanity build).
 # ============================================================
-# Installed as a local (non-global) npm project under /opt/agentmemory so
-# the resulting path /opt/agentmemory/node_modules/@agentmemory/agentmemory/
-# dist/index.mjs matches what agentmemory-mcp.sh and Cline's MCP config
-# expect.
-ARG AGENTMEMORY_VERSION=0.9.29
-WORKDIR /opt/agentmemory
-RUN printf '{"name":"zeus-dev-agentmemory","version":"1.0.0","private":true}\n' > package.json \
-    && npm install "@agentmemory/agentmemory@${AGENTMEMORY_VERSION}" --no-fund --no-audit \
-    && test -f node_modules/@agentmemory/agentmemory/dist/index.mjs \
-    && echo "OK: AgentMemory MCP ${AGENTMEMORY_VERSION} installed to /opt/agentmemory"
-WORKDIR /
-
-# ============================================================
-# Cline CLI (public npm: cline)
-# ============================================================
-ARG CLINE_VERSION=3.0.60
-RUN npm install -g "cline@${CLINE_VERSION}" \
-    && command -v cline \
-    && cline --version
-
-# ============================================================
-# Claude Code CLI (public npm: @anthropic-ai/claude-code)
-# ============================================================
-# Wrapped to unset AWS_PROFILE for Bedrock/IMDS auth (scoped fix - do NOT
-# change the global AWS_PROFILE=PDEVELOPER env, other tooling depends on it).
-ARG CLAUDE_CODE_VERSION=2.1.252
-RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-    && real_claude="$(command -v claude)" \
-    && mv "$real_claude" "${real_claude}.real" \
-    && printf '#!/bin/sh\n\nexec env -u AWS_PROFILE "%s.real" "$@"\n' "$real_claude" > "$real_claude" \
-    && chmod +x "$real_claude" \
-    && claude --version
-
-# ============================================================
-# sqz CLI (built from source in the sqz-builder stage above)
-# ============================================================
-COPY --from=sqz-builder /app/sqz /usr/local/bin/sqz
-RUN chmod +x /usr/local/bin/sqz \
-    && sqz --version
-
-# ============================================================
-# Archify skill / GitLab server tooling
-# ============================================================
-# Not installed. Neither had a public source that could be confirmed to
-# match the pinned internal version (BUILD-MANIFEST.md). Installing an
-# unverified same-named package here would be worse than omitting it --
-# verify-installation.sh reports both as intentionally skipped rather than
-# silently missing.
-
-# ============================================================
-# Install Apache Airflow 2.11.0
-# ============================================================
-# External build uses the standard public PyPI install: the internal
-# --no-deps + bundled wheel + --find-links workaround existed only to route
-# around an internal repository restriction on apache-airflow-providers-fab,
-# which does not apply here.
 RUN set -eux; \
-    curl -fsSL -o /tmp/constraints-airflow.txt \
-        https://raw.githubusercontent.com/apache/airflow/constraints-2.11.0/constraints-3.11.txt; \
+    WHEEL=/opt/files/apache_airflow-2.11.0-py3-none-any.whl; \
+    CONSTRAINTS=/opt/files/constraints-airflow.txt; \
+    if [ ! -f "$CONSTRAINTS" ]; then \
+        CONSTRAINTS=/tmp/constraints-airflow.txt; \
+        curl -fsSL -o "$CONSTRAINTS" \
+            https://raw.githubusercontent.com/apache/airflow/constraints-2.11.0/constraints-3.11.txt; \
+    fi; \
     \
-    echo "=== Installing Apache Airflow 2.11.0 from public PyPI ==="; \
-    pip3 install --no-input --no-cache-dir --constraint /tmp/constraints-airflow.txt \
-        apache-airflow==2.11.0; \
+    echo "=== Installing Apache Airflow 2.11.0 ==="; \
+    if [ -f "$WHEEL" ]; then \
+        pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" "$WHEEL"; \
+    else \
+        echo "WARNING: $WHEEL not found, falling back to public PyPI"; \
+        pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" apache-airflow==2.11.0; \
+    fi; \
     \
     echo "=== Installing Airflow provider packages from public PyPI ==="; \
-    pip3 install --no-input --no-cache-dir --constraint /tmp/constraints-airflow.txt \
+    pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" \
         apache-airflow-providers-common-compat \
         apache-airflow-providers-common-io \
         apache-airflow-providers-common-sql \
@@ -299,14 +231,14 @@ RUN set -eux; \
         apache-airflow-providers-sqlite; \
     \
     echo "=== Installing pinned Airflow provider packages ==="; \
-    pip3 install --no-input --no-cache-dir --constraint /tmp/constraints-airflow.txt \
+    pip3 install --no-input --no-cache-dir --constraint "$CONSTRAINTS" \
         apache-airflow-providers-amazon \
         apache-airflow-providers-ssh; \
     pip3 install --no-input --no-cache-dir --no-deps \
         apache-airflow-providers-fab==1.5.3; \
     \
     rm -f /tmp/constraints-airflow.txt; \
-    echo "=== Apache Airflow 2.11.0 installation complete ==="; \
+    echo "=== Apache Airflow installation complete ==="; \
     installed_version=$(python3 -c "import airflow; print(airflow.__version__)"); \
     echo "Installed Airflow version: $installed_version"; \
     if [ "$installed_version" != "2.11.0" ]; then \
@@ -316,10 +248,11 @@ RUN set -eux; \
     python3 -c "from airflow.providers.fab import __version__; print('FAB version:', __version__)"
 
 # ============================================================
-# Python dependencies (pinned versions from BUILD-MANIFEST.md)
+# Python dependencies
 # ============================================================
-RUN pip3 install --no-input --no-cache-dir --upgrade pip \
-    && pip3 install --no-input --no-cache-dir \
+RUN set -eux; \
+    pip3 install --no-input --no-cache-dir --upgrade pip; \
+    pip3 install --no-input --no-cache-dir \
         numpy==1.26.4 \
         pandas==2.2.3 \
         psycopg2-binary==2.9.11 \
@@ -334,21 +267,114 @@ RUN pip3 install --no-input --no-cache-dir --upgrade pip \
         jira==3.10.5 \
         beautifulsoup4==4.15.0 \
         html2text==2025.4.15 \
-        markdown-it-py==3.0.0 \
-        sqlfluff==4.1.0 \
-    && pip3 install --no-input --no-cache-dir \
+        markdown-it-py==3.0.0; \
+    \
+    SQLFLUFF=/opt/files/sqlfluff-4.1.0-py3-none-any.whl; \
+    if [ -f "$SQLFLUFF" ]; then \
+        pip3 install --no-input --no-cache-dir "$SQLFLUFF"; \
+    else \
+        echo "WARNING: $SQLFLUFF not found, falling back to public PyPI"; \
+        pip3 install --no-input --no-cache-dir sqlfluff==4.1.0; \
+    fi; \
+    \
+    pip3 install --no-input --no-cache-dir \
         botocore==1.43.54 \
-        boto3==1.43.54 \
-    && pip3 install --no-input --no-cache-dir \
-        docutils rsa \
-    && pip3 install --no-input --no-cache-dir --no-deps \
-        awscli==1.45.12 \
-    && aws --version \
-    && pip3 install --no-input --no-cache-dir ruff==0.15.11 \
-        || echo "WARNING: ruff not available in repository, continuing build" \
-    && pip3 install --no-input --no-cache-dir pyfiglet \
-        || echo "WARNING: pyfiglet not available in repository, continuing build" \
-    && rm -rf /root/.cache /tmp/* /var/tmp/*
+        boto3==1.43.54; \
+    pip3 install --no-input --no-cache-dir docutils rsa; \
+    pip3 install --no-input --no-cache-dir --no-deps awscli==1.45.12; \
+    aws --version; \
+    pip3 install --no-input --no-cache-dir ruff==0.15.11 \
+        || echo "WARNING: ruff not available in repository, continuing build"; \
+    pip3 install --no-input --no-cache-dir pyfiglet \
+        || echo "WARNING: pyfiglet not available in repository, continuing build"; \
+    rm -rf /root/.cache /tmp/* /var/tmp/*
+
+# ============================================================
+# Remaining packages from files/: agentmemory-mcp, cline, claude-code,
+# archify, gitlab-server-node-modules. sqz and *.vsix are skipped -- see
+# README.md.
+# ============================================================
+RUN set -eux; \
+    cd /opt; \
+    if [ ! -d files ]; then \
+        echo "No files/ directory found. Skipping tarball installation."; \
+        exit 0; \
+    fi; \
+    \
+    for tarball in files/*.tar.gz files/*.tar; do \
+        [ -e "$tarball" ] || continue; \
+        tarball_name=$(basename "$tarball"); \
+        case "$tarball_name" in \
+            sqz-*|*.vsix) \
+                echo "Skipping $tarball_name (not used in this image)"; \
+                continue ;; \
+            agentmemory-mcp-*.tar.gz) \
+                echo "Extracting $tarball_name to /opt/agentmemory/"; \
+                mkdir -p /opt/agentmemory; \
+                tar xzf "$tarball" -C /opt/agentmemory; \
+                continue ;; \
+        esac; \
+        echo "Processing tarball: $tarball_name"; \
+        cp "$tarball" /tmp/; \
+        cd /tmp; \
+        case "$tarball_name" in \
+            *.tar.gz) tar xzf "$tarball_name" ;; \
+            *.tar) tar xf "$tarball_name" ;; \
+        esac; \
+        rm -f "/tmp/$tarball_name"; \
+        if [ -d node_modules ] || [ -d package ]; then \
+            echo "Detected Node.js package structure"; \
+            if [ -d node_modules ]; then \
+                if [ ! -d /opt/node_modules ]; then \
+                    mv node_modules /opt/; \
+                else \
+                    cp -r node_modules/. /opt/node_modules/; \
+                    rm -rf node_modules; \
+                fi; \
+            fi; \
+            if [ -d package ]; then \
+                mv -n package /opt/ 2>/dev/null || true; \
+            fi; \
+        else \
+            echo "Generic tarball - extracting to /opt"; \
+            for item in *; do \
+                [ -e "$item" ] && mv -n "$item" /opt/ 2>/dev/null || true; \
+            done; \
+        fi; \
+        cd /opt; \
+    done; \
+    \
+    echo "--- Setting up CLI symlinks ---"; \
+    if [ -d /opt/node_modules/.bin ]; then \
+        for cli in /opt/node_modules/.bin/*; do \
+            [ -x "$cli" ] || continue; \
+            ln -sf "$cli" /usr/local/bin/"$(basename "$cli")"; \
+        done; \
+    fi; \
+    echo "--- Setting up symlinks for generic /opt binaries ---"; \
+    for bin in /opt/*; do \
+        [ -f "$bin" ] && [ -x "$bin" ] || continue; \
+        ln -sf "$bin" /usr/local/bin/"$(basename "$bin")"; \
+    done; \
+    \
+    npm cache clean --force || true; \
+    rm -rf /root/.cache /tmp/* /var/tmp/*; \
+    echo "=== Tarball installation complete ==="
+
+# ============================================================
+# Claude Code wrapper: unset AWS_PROFILE for Bedrock/IMDS auth (scoped fix
+# -- do NOT change the global AWS_PROFILE=PDEVELOPER env, other tooling
+# depends on it).
+# ============================================================
+RUN if [ -f /opt/claude ]; then \
+        echo "--- Installing Claude wrapper to unset AWS_PROFILE ---"; \
+        rm -f /usr/local/bin/claude; \
+        printf '#!/bin/sh\n\nexec env -u AWS_PROFILE /opt/claude "$@"\n' > /usr/local/bin/claude; \
+        chmod +x /usr/local/bin/claude; \
+        echo "OK: Claude wrapper installed at /usr/local/bin/claude"; \
+    else \
+        echo "Claude wrapper not applicable - /opt/claude not found"; \
+    fi
 
 # ============================================================
 # Install jirashell CLI wrapper

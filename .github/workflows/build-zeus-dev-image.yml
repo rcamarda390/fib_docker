@@ -28,7 +28,11 @@ jobs:
       version_arg: ZEUS_DEV_IMAGE_VERSION
       platforms: linux/amd64
       timeout_minutes: 45
-      smoke_command: /usr/local/bin/verify-installation.sh,--prod
+      # Not --prod: files/ is only populated by your build_image.sh process
+      # before you run the build, not by this repo's own CI checkout, so a
+      # strict check here would always report the files/-sourced tools
+      # missing. This just confirms the image boots and reports its status.
+      smoke_command: /usr/local/bin/verify-installation.sh
       scan: true
       auto_increment_revision: true
       publish: ${{ github.event_name != 'pull_request' }}
