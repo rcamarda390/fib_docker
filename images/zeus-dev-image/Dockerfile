@@ -73,11 +73,11 @@ ENV ARCHIFY_UPDATE_CHECK_DISABLED=1
 # ============================================================
 # Install OS packages
 # ============================================================
-# nodejs:20 module enabled explicitly -- without this, plain `npm`/`nodejs`
+# nodejs:22 module enabled explicitly -- without this, plain `npm`/`nodejs`
 # package names resolve to whatever the default module stream is for the
-# base image's RHEL9 AppStream, not necessarily 20.x.
+# base image's RHEL9 AppStream, not necessarily 22.x.
 RUN dnf -y module enable postgresql:15 \
-    && dnf -y module enable nodejs:20 \
+    && dnf -y module enable nodejs:22 \
     && dnf install -y \
         vim \
         vi \
@@ -99,8 +99,8 @@ RUN dnf -y module enable postgresql:15 \
     && node --version \
     && npm --version \
     && case "$(node --version)" in \
-        v20.*) echo "OK: Node.js 20.x confirmed" ;; \
-        *) echo "ERROR: Expected Node.js v20.x, got $(node --version)"; exit 1 ;; \
+        v22.*) echo "OK: Node.js 22.x confirmed" ;; \
+        *) echo "ERROR: Expected Node.js v22.x, got $(node --version)"; exit 1 ;; \
     esac
 
 # ============================================================
