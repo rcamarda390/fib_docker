@@ -73,14 +73,22 @@ ARG BUILD_MODE=test
 # ============================================================
 ENV AIRFLOW_HOME=/opt/airflow
 ENV ARCHIFY_UPDATE_CHECK_DISABLED=1
+# PostgreSQL 15 from PGDG installs its client binaries outside the default
+# RHEL path. Keep psql directly available to users and downstream scripts.
+ENV PATH=/usr/pgsql-15/bin:${PATH}
 
 # ============================================================
 # Install OS packages
 # ============================================================
-# nodejs:22 module enabled explicitly -- without this, plain `npm`/`nodejs`
+# UBI9 does not publish RHEL's PostgreSQL module metadata, so attempting to
+# enable postgresql:15 fails before package installation. Install the required
+# PostgreSQL 15 client from PGDG's official EL9 repository instead.
+#
+# nodejs:22 is still enabled explicitly -- without this, plain `npm`/`nodejs`
 # package names resolve to whatever the default module stream is for the
 # base image's RHEL9 AppStream, not necessarily 22.x.
-RUN dnf -y module enable postgresql:15 \
+RUN dnf install -y \
+        https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm \
     && dnf -y module enable nodejs:22 \
     && dnf install -y \
         vim \
@@ -95,7 +103,7 @@ RUN dnf -y module enable postgresql:15 \
         git \
         jq \
         tar \
-        postgresql \
+        postgresql15 \
         xdg-user-dirs \
     && dnf clean all \
     && rm -rf /var/cache/dnf /var/cache/yum /tmp/* /var/tmp/* \
@@ -105,6 +113,10 @@ RUN dnf -y module enable postgresql:15 \
     && case "$(node --version)" in \
         v22.*) echo "OK: Node.js 22.x confirmed" ;; \
         *) echo "ERROR: Expected Node.js v22.x, got $(node --version)"; exit 1 ;; \
+    esac \
+    && case "$(psql --version)" in \
+        'psql (PostgreSQL) 15.'*) echo "OK: PostgreSQL 15.x client confirmed" ;; \
+        *) echo "ERROR: Expected PostgreSQL 15.x client, got $(psql --version)"; exit 1 ;; \
     esac
 
 # ============================================================
