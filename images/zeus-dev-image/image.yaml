@@ -1,0 +1,13 @@
+name: zeus-dev-image
+upstream_version: 1.0.0
+revision: 1
+build_args:
+  AGENTMEMORY_VERSION: "0.9.29"
+  CLINE_VERSION: "3.0.60"
+  CLAUDE_CODE_VERSION: "2.1.252"
+  SQZ_VERSION: "1.3.0"
+  SQZ_COMMIT: d024b6b6bec152dfa7a63e2316054b1bb33a8110
+publish:
+  ghcr: true
+  dockerhub: true
+  latest: false
