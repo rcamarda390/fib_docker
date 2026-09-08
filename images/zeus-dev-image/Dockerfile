@@ -24,8 +24,15 @@ FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a
 ARG SQZ_VERSION=1.3.0
 ARG SQZ_COMMIT=d024b6b6bec152dfa7a63e2316054b1bb33a8110
 RUN apk add --no-cache ca-certificates git \
-    && git clone --depth 1 --branch "v${SQZ_VERSION}" \
-       https://github.com/ojuschugh1/sqz.git /src \
+    && n=0; until [ "$n" -ge 5 ]; do \
+        git clone --depth 1 --branch "v${SQZ_VERSION}" \
+            https://github.com/ojuschugh1/sqz.git /src && break; \
+        n=$((n + 1)); \
+        echo "git clone failed (attempt $n/5), retrying..."; \
+        rm -rf /src; \
+        sleep $((n * 3)); \
+    done \
+    && test -d /src \
     && test "$(git -C /src rev-parse HEAD)" = "$SQZ_COMMIT"
 
 FROM rust:1.85-alpine AS sqz-builder
