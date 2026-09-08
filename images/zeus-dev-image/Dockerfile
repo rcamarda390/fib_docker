@@ -48,22 +48,24 @@ RUN apk add --no-cache ca-certificates git \
 # stage so it remains compatible with the final glibc-based image.
 FROM registry.access.redhat.com/ubi9/python-311:latest AS xdg-user-dirs-source
 ARG XDG_USER_DIRS_COMMIT
-RUN dnf install -y gcc git \
-    && python3 -m pip install --no-cache-dir meson==1.10.0 ninja==1.13.0 \
-    && git init /src \
-    && git -C /src remote add origin https://gitlab.freedesktop.org/xdg/xdg-user-dirs.git \
-    && n=0; until [ "$n" -ge 5 ]; do \
+USER 0
+RUN set -e; \
+    dnf install -y gcc git; \
+    python3 -m pip install --no-cache-dir meson==1.10.0 ninja==1.13.0; \
+    git init /src; \
+    git -C /src remote add origin https://gitlab.freedesktop.org/xdg/xdg-user-dirs.git; \
+    n=0; until [ "$n" -ge 5 ]; do \
         git -C /src fetch --depth 1 origin "$XDG_USER_DIRS_COMMIT" \
             && git -C /src checkout --detach FETCH_HEAD && break; \
         n=$((n + 1)); \
         echo "git fetch failed (attempt $n/5), retrying..."; \
         sleep $((n * 3)); \
-    done \
-    && test "$(git -C /src rev-parse HEAD)" = "$XDG_USER_DIRS_COMMIT" \
-    && meson setup /build /src --prefix=/usr/local -Ddocs=false -Dnls=false \
-    && meson compile -C /build xdg-user-dir \
-    && install -D -m 0755 /build/src/xdg-user-dir /out/usr/local/bin/xdg-user-dir \
-    && test "$(HOME=/tmp/xdg-user-dirs-test /out/usr/local/bin/xdg-user-dir DOCUMENTS)" = /tmp/xdg-user-dirs-test
+    done; \
+    test "$(git -C /src rev-parse HEAD)" = "$XDG_USER_DIRS_COMMIT"; \
+    meson setup /build /src --prefix=/usr/local -Ddocs=false -Dnls=false; \
+    meson compile -C /build xdg-user-dir; \
+    install -D -m 0755 /build/src/xdg-user-dir /out/usr/local/bin/xdg-user-dir; \
+    test "$(HOME=/tmp/xdg-user-dirs-test /out/usr/local/bin/xdg-user-dir DOCUMENTS)" = /tmp/xdg-user-dirs-test
 
 # ============================================================
 # Final image
