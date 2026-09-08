@@ -325,7 +325,7 @@ RUN set -eux; \
     npm install --prefix /opt/agentmemory-mcp --omit=dev @agentmemory/mcp@0.9.29; \
     ln -sf /opt/agentmemory/node_modules/.bin/agentmemory /usr/local/bin/agentmemory; \
     ln -sf /opt/agentmemory-mcp/node_modules/@agentmemory/mcp/bin.mjs /usr/local/bin/agentmemory-mcp; \
-    npm install -g cline@3.0.60; \
+    npm install -g cline@3.0.61; \
     npm install -g @anthropic-ai/claude-code@2.1.252; \
     cline --version; \
     claude --version
