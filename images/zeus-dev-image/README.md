@@ -19,6 +19,8 @@ Actions build. It does not copy or retain the air-gapped `files/` or
 
 - Base: `registry.access.redhat.com/ubi9/python-311:latest`
 - Runtimes: Python 3.11, Node.js 22, PostgreSQL 15 client
+- `xdg-user-dir` from upstream xdg-user-dirs `0.20`, pinned to commit
+  `cd05b6d29da1abdb3cd253ef496ae7fd1593e4bb`
 - Apache Airflow `2.11.0`, installed with the official Python 3.11
   constraints and the FTP/HTTP/IMAP/SMTP/SQLite/common/Amazon/SSH/FAB
   providers from PyPI
