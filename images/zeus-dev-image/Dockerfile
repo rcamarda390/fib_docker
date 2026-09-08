@@ -3,9 +3,9 @@
 # zeus-dev-image -- base image candidate
 # ============================================================
 # Builds a UBI9/Python 3.11 base image plus the additional tooling your
-# build_image.sh process drops into files/ (agentmemory-mcp, cline,
-# claude-code, archify, gitlab-server-node-modules, the Airflow wheel, and
-# sqlfluff). Built here (public GitHub Actions) because the real target
+# installs from public upstream sources (AgentMemory, Cline, Claude Code,
+# Archify, Airflow, SQLFluff, and GitLab MCP dependencies). Built here
+# (public GitHub Actions) because the real target
 # base -- artifactory.<redacted>/beds-docker/beds-ubi9-python3.11 -- is
 # air-gapped and unreachable from this runner. You import the published
 # candidate into artifactory yourself, Xray it, and promote it to replace
