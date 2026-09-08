@@ -210,8 +210,7 @@ RUN npm install -g pyright \
 
 # ============================================================
 # Apache Airflow -- wheel only (apache_airflow-2.11.0-py3-none-any.whl),
-# constrained by the supplied constraints-airflow.txt. Falls back to public
-# PyPI when files/ doesn't carry them (this repo's own CI sanity build).
+# constrained by the public Airflow Python 3.11 constraints file.
 # ============================================================
 RUN set -eux; \
     CONSTRAINTS=/tmp/constraints-airflow.txt; \
@@ -302,8 +301,7 @@ RUN set -eux; \
     test -x /opt/gitlab-mcp-server/node_modules/.bin/tsc
 
 # ============================================================
-# Archify CLI# ============================================================
- (vendored from the pinned upstream commit)
+# Archify CLI (vendored from the pinned upstream commit)
 # ============================================================
 COPY --from=archify-source /src/archify/ /opt/archify/
 RUN ln -sf /opt/archify/bin/archify.mjs /usr/local/bin/archify \
