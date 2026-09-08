@@ -28,7 +28,7 @@ correctly), not the artifact you'd actually promote.
 - `sqlfluff` from `files/sqlfluff-4.1.0-py3-none-any.whl`
 - AWS CLI `1.45.12`, boto3/botocore `1.43.54`
 - Everything else in `files/` (`agentmemory-mcp-*.tar.gz`, `cline-*.tar.gz`,
-  `claude-code-*.tar.gz`, `archify-*.tar.gz`,
+  `claude-code-*.tar.gz`,
   `gitlab-server-node-modules.tar.gz`) installed by the generic tarball
   step: Node.js packages merge into `/opt/node_modules` with `.bin/*`
   symlinked onto `PATH`; other tarballs extract flat into `/opt` with any
@@ -37,6 +37,10 @@ correctly), not the artifact you'd actually promote.
   `/opt/agentmemory/` so the resulting
   `/opt/agentmemory/node_modules/@agentmemory/agentmemory/dist/index.mjs`
   path matches what `agentmemory-mcp.sh` and Cline's MCP config expect.
+- Archify CLI is installed at `/opt/archify` from `tt-a1i/archify` commit
+  `06dd052602dd9a369e4d034e24faef0917b5a60c` (version `2.17.0-dev.1`).
+  This exact commit matches the verified internal filename
+  `archify-2.17.0-dev.1-06dd052602dd.tar.gz`.
 - `claude` gets wrapped to unset `AWS_PROFILE` for Bedrock/IMDS auth if
   `/opt/claude` exists after extraction (scoped fix -- does not touch the
   global `AWS_PROFILE=PDEVELOPER` other tooling depends on)
