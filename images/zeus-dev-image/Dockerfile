@@ -2,8 +2,8 @@
 # ============================================================
 # zeus-dev-image -- base image candidate
 # ============================================================
-# Builds a UBI9/Python 3.11 base image plus the additional tooling your
-# installs from public upstream sources (AgentMemory, Cline, Claude Code,
+# Builds a UBI9/Python 3.11 base image and installs additional tooling from
+# public upstream sources (AgentMemory, Cline, Claude Code,
 # Archify, Airflow, SQLFluff, and GitLab MCP dependencies). Built here
 # (public GitHub Actions) because the real target
 # base -- artifactory.<redacted>/beds-docker/beds-ubi9-python3.11 -- is
@@ -46,6 +46,10 @@ RUN apk add --no-cache ca-certificates git \
 # build. Pin to a digest if this image needs to stop tracking upstream UBI9
 # security updates automatically.
 FROM registry.access.redhat.com/ubi9/python-311:latest
+
+# The UBI base defaults to UID 1001. Build layers need root to install OS
+# packages and write under /etc, /opt, and /usr/local.
+USER 0
 
 # This image is a composite base image, not a build of one upstream
 # project, so there is no single "upstream_version" to track. This ARG is
@@ -209,8 +213,7 @@ RUN npm install -g pyright \
 # ============================================================
 
 # ============================================================
-# Apache Airflow -- wheel only (apache_airflow-2.11.0-py3-none-any.whl),
-# constrained by the public Airflow Python 3.11 constraints file.
+# Apache Airflow 2.11.0 from public PyPI, constrained for Python 3.11.
 # ============================================================
 RUN set -eux; \
     CONSTRAINTS=/tmp/constraints-airflow.txt; \
@@ -312,19 +315,15 @@ RUN ln -sf /opt/archify/bin/archify.mjs /usr/local/bin/archify \
     && test "${archify_version}" = "2.17.0-dev.1"
 
 # ============================================================
-# Claude Code wrapper: unset AWS_PROFILE for Bedrock/IMDS auth (scoped fix
-# -- do NOT change the global AWS_PROFILE=PDEVELOPER env, other tooling
-# depends on it).
+# Claude Code wrapper: unset AWS_PROFILE for Bedrock/IMDS auth without
+# changing the global AWS_PROFILE other tooling depends on.
 # ============================================================
-RUN if [ -f /opt/claude ]; then \
-        echo "--- Installing Claude wrapper to unset AWS_PROFILE ---"; \
-        rm -f /usr/local/bin/claude; \
-        printf '#!/bin/sh\n\nexec env -u AWS_PROFILE /opt/claude "$@"\n' > /usr/local/bin/claude; \
-        chmod +x /usr/local/bin/claude; \
-        echo "OK: Claude wrapper installed at /usr/local/bin/claude"; \
-    else \
-        echo "Claude wrapper not applicable - /opt/claude not found"; \
-    fi
+RUN set -eux; \
+    real_claude="$(command -v claude)"; \
+    mv "$real_claude" "${real_claude}.real"; \
+    printf '#!/bin/sh\n\nexec env -u AWS_PROFILE "%s.real" "$@"\n' "$real_claude" > "$real_claude"; \
+    chmod +x "$real_claude"; \
+    claude --version
 
 # ============================================================
 # Install jirashell CLI wrapper
@@ -398,5 +397,6 @@ EXPOSE 5439
 # Default workdir and entrypoint
 # ============================================================
 WORKDIR /opt/airflow
+USER 1001
 ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]
 CMD ["tail", "-f", "/dev/null"]

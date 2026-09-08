@@ -5,24 +5,23 @@ Built here (public GitHub Actions, GHCR/Docker Hub) because that base is on
 an air-gapped internal artifactory unreachable from a hosted runner. The
 flow is:
 
-1. Populate `files/` (and `preload/` if needed) with the tarballs/wheels
-   your `build_image.sh` process produces.
-2. Dispatch `build-zeus-dev-image.yml` to build and publish a candidate
+1. Dispatch `build-zeus-dev-image.yml` to build and publish a candidate
    here.
-3. Import the candidate into your artifactory and run Xray against it.
-4. If it passes, it replaces `beds-ubi9-python3.11` as the base for your
+2. Import the candidate into your artifactory and run Xray against it.
+3. If it passes, it replaces `beds-ubi9-python3.11` as the base for your
    downstream image.
 
-This image installs its tools from public upstream sources during the GitHub Actions build. It does not copy or retain the air-gapped `files/` or `preload/` artifact directories.
+This image installs its tools from public upstream sources during the GitHub
+Actions build. It does not copy or retain the air-gapped `files/` or
+`preload/` artifact directories.
 
 ## What's in it
 
 - Base: `registry.access.redhat.com/ubi9/python-311:latest`
 - Runtimes: Python 3.11, Node.js 22, PostgreSQL 15 client
-- Apache Airflow `2.11.0` installed from `files/apache_airflow-2.11.0-py3-none-any.whl`
-  (constrained by `files/constraints-airflow.txt`) plus the FTP/HTTP/IMAP/
-  SMTP/SQLite/common/Amazon/SSH/FAB providers from public PyPI
-- `sqlfluff` from `files/sqlfluff-4.1.0-py3-none-any.whl`
+- Apache Airflow `2.11.0`, installed with the official Python 3.11
+  constraints and the FTP/HTTP/IMAP/SMTP/SQLite/common/Amazon/SSH/FAB
+  providers from PyPI
 - AWS CLI `1.45.12`, boto3/botocore `1.43.54`
 - AgentMemory `0.9.29` from npm (`@agentmemory/agentmemory` and `@agentmemory/mcp`)
 - Cline CLI `3.0.60` from npm
@@ -30,27 +29,12 @@ This image installs its tools from public upstream sources during the GitHub Act
 - SQLFluff `4.1.0` from PyPI
 - Archify `2.17.0-dev.1` from the pinned upstream commit
 - GitLab MCP Node.js dependencies installed under `/opt/gitlab-mcp-server/node_modules`
-- Everything else in `files/` (`agentmemory-mcp-*.tar.gz`, `cline-*.tar.gz`,
-  `claude-code-*.tar.gz`,
-  `gitlab-server-node-modules.tar.gz`) installed by the generic tarball
-  step: Node.js packages merge into `/opt/node_modules` with `.bin/*`
-  symlinked onto `PATH`; other tarballs extract flat into `/opt` with any
-  top-level executables symlinked onto `PATH`.
-  `agentmemory-mcp-*.tar.gz` is a special case -- extracted straight into
-  `/opt/agentmemory/` so the resulting
-  `/opt/agentmemory/node_modules/@agentmemory/agentmemory/dist/index.mjs`
-  path matches what `agentmemory-mcp.sh` and Cline's MCP config expect.
 - Archify CLI is installed at `/opt/archify` from `tt-a1i/archify` commit
   `06dd052602dd9a369e4d034e24faef0917b5a60c` (version `2.17.0-dev.1`).
   This exact commit matches the verified internal filename
   `archify-2.17.0-dev.1-06dd052602dd.tar.gz`.
-- `claude` gets wrapped to unset `AWS_PROFILE` for Bedrock/IMDS auth if
-  `/opt/claude` exists after extraction (scoped fix -- does not touch the
-  global `AWS_PROFILE=PDEVELOPER` other tooling depends on)
-
-Airflow and sqlfluff fall back to public PyPI when their wheel isn't
-present in `files/` (only relevant to this repo's own empty-`files/`
-sanity build).
+- `claude` is wrapped to unset `AWS_PROFILE` for Bedrock/IMDS auth without
+  changing the global environment for other tooling
 
 ## Intentionally skipped
 
