@@ -26,7 +26,7 @@ Actions build. It does not copy or retain the air-gapped `files/` or
   providers from PyPI
 - AWS CLI `1.45.12`, boto3/botocore `1.43.54`
 - AgentMemory `0.9.29` from npm (`@agentmemory/agentmemory` and `@agentmemory/mcp`)
-- Cline CLI `3.0.60` from npm
+- Cline CLI `3.0.61` from npm
 - Claude Code CLI `2.1.252` from npm
 - SQLFluff `4.1.0` from PyPI
 - Archify `2.17.0-dev.1` from the pinned upstream commit
