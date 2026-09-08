@@ -401,7 +401,11 @@ RUN chmod 1777 /tmp
 # Copy new_prompt.sh for custom shell prompt
 # ============================================================
 COPY new_prompt.sh /usr/local/share/new_prompt.sh
-RUN chmod 644 /usr/local/share/new_prompt.sh
+RUN set -eu; \
+    chmod 644 /usr/local/share/new_prompt.sh; \
+    touch /etc/bash.bashrc; \
+    grep -qxF '. /usr/local/share/new_prompt.sh' /etc/bash.bashrc \
+        || printf '\n. /usr/local/share/new_prompt.sh\n' >> /etc/bash.bashrc
 
 # ============================================================
 # Entrypoint
