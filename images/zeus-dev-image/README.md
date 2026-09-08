@@ -1,56 +1,66 @@
 # zeus-dev-image
 
-Public-source rebuild of the internal `zeus-dev-image` dev container. Every
-component is installed from a public registry (npmjs.org, PyPI, GitHub,
-Docker Hub, Red Hat Registry) -- there is no dependency on an internal
-repository or Artifactory mirror.
+Base image candidate for `artifactory.<redacted>/beds-docker/beds-ubi9-python3.11`.
+Built here (public GitHub Actions, GHCR/Docker Hub) because that base is on
+an air-gapped internal artifactory unreachable from a hosted runner. The
+flow is:
+
+1. Populate `files/` (and `preload/` if needed) with the tarballs/wheels
+   your `build_image.sh` process produces.
+2. Dispatch `build-zeus-dev-image.yml` to build and publish a candidate
+   here.
+3. Import the candidate into your artifactory and run Xray against it.
+4. If it passes, it replaces `beds-ubi9-python3.11` as the base for your
+   downstream image.
+
+`files/` and `preload/` ship empty in this repo -- this repo's own CI run
+builds with nothing in them, which is a structural sanity check only (does
+the Dockerfile still build, does Airflow/sqlfluff fall back to PyPI
+correctly), not the artifact you'd actually promote.
 
 ## What's in it
 
 - Base: `registry.access.redhat.com/ubi9/python-311:latest`
 - Runtimes: Python 3.11, Node.js 20, PostgreSQL 15 client
-- Apache Airflow `2.11.0` with the FTP/HTTP/IMAP/SMTP/SQLite/common/Amazon/
-  SSH/FAB providers, installed straight from public PyPI against the
-  official Airflow constraints file for that release
+- Apache Airflow `2.11.0` installed from `files/apache_airflow-2.11.0-py3-none-any.whl`
+  (constrained by `files/constraints-airflow.txt`) plus the FTP/HTTP/IMAP/
+  SMTP/SQLite/common/Amazon/SSH/FAB providers from public PyPI
+- `sqlfluff` from `files/sqlfluff-4.1.0-py3-none-any.whl`
 - AWS CLI `1.45.12`, boto3/botocore `1.43.54`
-- `cline` CLI `3.0.60` (npm)
-- `@anthropic-ai/claude-code` CLI `2.1.252` (npm), wrapped to unset
-  `AWS_PROFILE` for Bedrock/IMDS auth without touching the global
-  `AWS_PROFILE=PDEVELOPER` other tooling depends on
-- AgentMemory MCP `0.9.29` (`@agentmemory/agentmemory` on npm), installed
-  under `/opt/agentmemory` so its entry point matches Cline's
-  `cline_mcp_settings.json` and `agentmemory-mcp.sh`
-- `sqz` CLI `1.3.0`, built from source at the same commit already pinned by
-  `images/sqz-mcp` in this repo (`SQZ_COMMIT` in `image.yaml`)
-- Dev tools: pyright, ruff, sqlfluff, pyfiglet, jira/jirashell
+- Everything else in `files/` (`agentmemory-mcp-*.tar.gz`, `cline-*.tar.gz`,
+  `claude-code-*.tar.gz`, `archify-*.tar.gz`,
+  `gitlab-server-node-modules.tar.gz`) installed by the generic tarball
+  step: Node.js packages merge into `/opt/node_modules` with `.bin/*`
+  symlinked onto `PATH`; other tarballs extract flat into `/opt` with any
+  top-level executables symlinked onto `PATH`.
+  `agentmemory-mcp-*.tar.gz` is a special case -- extracted straight into
+  `/opt/agentmemory/` so the resulting
+  `/opt/agentmemory/node_modules/@agentmemory/agentmemory/dist/index.mjs`
+  path matches what `agentmemory-mcp.sh` and Cline's MCP config expect.
+- `claude` gets wrapped to unset `AWS_PROFILE` for Bedrock/IMDS auth if
+  `/opt/claude` exists after extraction (scoped fix -- does not touch the
+  global `AWS_PROFILE=PDEVELOPER` other tooling depends on)
 
-## Intentionally omitted
+Airflow and sqlfluff fall back to public PyPI when their wheel isn't
+present in `files/` (only relevant to this repo's own empty-`files/`
+sanity build).
 
-Two components from the internal build have no confirmed public equivalent
-and are **not installed**:
+## Intentionally skipped
 
-- **Archify skill** (`archify-2.17.0-dev.1-*.tar.gz`) -- a public package
-  named `archify` exists, but its versioning and purpose (an agent skill
-  for architecture diagrams) don't line up with the internal pin, so it was
-  not assumed to be the same tool.
-- **GitLab server tooling** (`gitlab-server-node-modules.tar.gz`) -- no
-  public equivalent found; likely internal-only.
+- **`sqz-*.tar.gz`** -- not used, per instruction.
+- **`cline-*.vsix`** -- a VS Code extension package; this is a headless
+  image with no VS Code Server, so it doesn't belong here. Install it
+  through whatever devcontainer/VS Code Server flow already handles
+  extensions, not this image.
+- **`airflow-2.11.0-py3.11.tar.gz`** -- redundant with the wheel; the wheel
+  is the one that gets installed.
 
-`verify-installation.sh` reports both as intentionally skipped. If a public
-source is confirmed for either later, drop the tarball/package reference
-into `files/` or `preload/` and add an explicit install step next to the
-component it replaces -- see the "Extension points" comment in the
-Dockerfile.
+## Untouched
 
-## Differences from the internal build
-
-- Public npm/PyPI registries instead of an internal Artifactory mirror
-- Public Docker CE repo instead of an internal mirror
-- Airflow installed directly from PyPI (no `--no-deps` + bundled-wheel
-  workaround -- that only existed to route around an internal repository
-  restriction on `apache-airflow-providers-fab`)
-- `files/` and `preload/` ship empty; they're drop-in points for whatever
-  gets resolved for the two omitted components above
+Users/groups, Docker CLI, unzip, `agentmemory-mcp.sh`, `jirashell.sh`,
+`new_prompt.sh`, `dev-entrypoint.sh`, `verify-installation.sh`, and the
+dnf package list are unchanged from before this base-image rework and are
+owned by your existing downstream build, not this task.
 
 ## Build
 
@@ -61,13 +71,10 @@ docker run --rm -it zeus-dev-image:external /bin/bash
 
 `BUILD_MODE=production` makes the in-build verification step
 (`verify-installation.sh --prod`) fail the build if a required tool is
-missing; the default `test` mode only warns.
-
-## Verify
-
-```bash
-docker run --rm zeus-dev-image:external /usr/local/bin/verify-installation.sh --prod
-```
+missing; the default `test` mode only warns. `verify-installation.sh`
+still lists `sqz`/`cline`/`claude`/etc. as "required" (it wasn't changed
+as part of this rework), so it'll warn about `sqz` even though it's
+intentionally skipped -- non-blocking in the default `test` mode.
 
 ## Release
 
