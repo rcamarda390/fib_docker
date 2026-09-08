@@ -71,11 +71,6 @@ ENV AIRFLOW_HOME=/opt/airflow
 ENV ARCHIFY_UPDATE_CHECK_DISABLED=1
 
 # ============================================================
-# Add useful shell aliases
-# ============================================================
-RUN echo "alias ll='ls -alF'" > /etc/profile.d/aliases.sh
-
-# ============================================================
 # Install OS packages
 # ============================================================
 # nodejs:20 module enabled explicitly -- without this, plain `npm`/`nodejs`
