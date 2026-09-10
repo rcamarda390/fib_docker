@@ -150,9 +150,13 @@ RUN apt-get update \
             || { echo "$package is below required version $OPENSSL_MIN_VERSION" >&2; exit 1; }; \
        done \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
-    && apt-get purge -y --auto-remove \
-        login passwd libpam-modules-bin libpam-modules libpam-runtime libpam0g \
     && rm -rf /tmp/glibc /var/lib/apt/lists/* \
+    && mkdir -p /usr/share/debconf \
+    && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
+    && chmod 0755 /usr/share/debconf/frontend \
+    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+        libpam-modules-bin libpam-modules libpam-runtime libpam0g login passwd \
+    && rm -rf /usr/share/debconf \
     && ldconfig
 
 COPY --from=builder /install             /usr/local
