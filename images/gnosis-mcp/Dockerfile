@@ -21,7 +21,7 @@ ARG PYTHON_VERSION=3.13
 # ---------------------------------------------------------------------------
 ARG DEBIAN_SUITE=trixie
 ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u3
-ARG GLIBC_BACKPORT_VERSION=1:2.41-12+deb13u3+rcamarda1
+ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u3+rcamarda1
 
 FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
 ARG DEBIAN_SUITE
