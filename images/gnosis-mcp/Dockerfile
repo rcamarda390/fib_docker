@@ -6,11 +6,12 @@
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
-# Security: Python 3.13 plus current Debian updates; PAM and attr are removed
-# because this non-login service does not use them. SQLite is replaced with a
-# checksum-pinned upstream build that retains the required FTS5 and extension
-# functionality. Debian Trixie still has no supported fixes for the remaining
-# glibc findings (CVE-2026-5435, CVE-2026-5928, and CVE-2026-5450).
+# Security: Python 3.13 on Debian Bookworm plus current Debian updates. The
+# Bookworm glibc line is not affected by the Trixie-only glibc findings
+# CVE-2026-5435, CVE-2026-5928, and CVE-2026-5450. PAM and build utilities are
+# removed from the final image because this is a non-login service. SQLite is
+# replaced with a checksum-pinned upstream build that retains required FTS5
+# and extension functionality.
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13
@@ -18,7 +19,7 @@ ARG PYTHON_VERSION=3.13
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim AS builder
+FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -94,7 +95,7 @@ RUN set -e; \
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 
 ARG SQLITE_VERSION=3.53.4
 COPY --from=builder /opt/sqlite/lib/libsqlite3.so* /usr/local/lib/
@@ -104,33 +105,25 @@ COPY --from=builder /opt/sqlite/lib/libsqlite3.so* /usr/local/lib/
 # CVE-2026-14456, CVE-2026-63074, CVE-2026-63073, and CVE-2026-75803.
 # Keep this as a minimum rather than an exact pin so later Debian security
 # revisions remain eligible. The build fails closed if the mirror is stale.
-ARG OPENSSL_MIN_VERSION=3.5.7-1~deb13u2
+ARG OPENSSL_MIN_VERSION=3.0.20-1~deb12u2
 
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         libgomp1 \
-        libssl3t64 \
+        libssl3 \
         openssl \
         openssl-provider-legacy \
-    && for package in libssl3t64 openssl openssl-provider-legacy; do \
+    && for package in libssl3 openssl openssl-provider-legacy; do \
         installed_version="$(dpkg-query -W -f='${Version}' "$package")"; \
         echo "$package=$installed_version"; \
         dpkg --compare-versions "$installed_version" ge "$OPENSSL_MIN_VERSION" \
             || { echo "$package is below required version $OPENSSL_MIN_VERSION" >&2; exit 1; }; \
        done \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
-    && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
+    && apt-get purge -y --auto-remove \
+        login passwd libpam-modules-bin libpam-modules libpam-runtime libpam0g \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /usr/share/debconf \
-    && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
-    && chmod 0755 /usr/share/debconf/frontend \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
-        libuuid1 ncurses-base util-linux libacl1 libattr1 liblastlog2-2 \
-        libpam-runtime libpam-modules libpam0g libsqlite3-0 \
-        ncurses-bin libmount1 login mount \
-    && rm -rf /usr/share/debconf \
     && ldconfig
 
 COPY --from=builder /install             /usr/local
@@ -181,7 +174,7 @@ RUN ! command -v pip \
     && ! python -c "import pip" 2>/dev/null \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
-    && for package in libattr1 libpam0g libpam-modules libpam-runtime libsqlite3-0; do \
+    && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0; do \
         package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
         test "$package_state" != "installed" || { echo "$package is still installed" >&2; exit 1; }; \
        done \
