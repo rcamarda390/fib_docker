@@ -155,7 +155,7 @@ RUN apt-get update \
     && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
     && chmod 0755 /usr/share/debconf/frontend \
     && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        libpam-modules-bin libpam-modules libpam-runtime libpam0g login passwd \
+        libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 login passwd \
     && rm -rf /usr/share/debconf \
     && ldconfig
 
