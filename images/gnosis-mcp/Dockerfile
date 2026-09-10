@@ -140,10 +140,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends /tmp/glibc/libc6_*_*.deb /tmp/glibc/libc-bin_*_*.deb \
     && apt-get install -y --no-install-recommends \
         libgomp1 \
-        libssl3 \
+        libssl3t64 \
         openssl \
         openssl-provider-legacy \
-    && for package in libssl3 openssl openssl-provider-legacy; do \
+    && for package in libssl3t64 openssl openssl-provider-legacy; do \
         installed_version="$(dpkg-query -W -f='${Version}' "$package")"; \
         echo "$package=$installed_version"; \
         dpkg --compare-versions "$installed_version" ge "$OPENSSL_MIN_VERSION" \
