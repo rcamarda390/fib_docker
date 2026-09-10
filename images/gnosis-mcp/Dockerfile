@@ -6,11 +6,12 @@
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
-# Security: Python 3.13 plus current Debian updates; PAM and attr are removed
-# because this non-login service does not use them. SQLite is replaced with a
-# checksum-pinned upstream build that retains the required FTS5 and extension
-# functionality. Debian Trixie still has no supported fixes for the remaining
-# glibc findings (CVE-2026-5435, CVE-2026-5928, and CVE-2026-5450).
+# Security: Python 3.13 on Debian Trixie plus a coherently rebuilt glibc pair
+# carrying the upstream fixes for CVE-2026-5435, CVE-2026-5928, and
+# CVE-2026-5450. PAM and build utilities are removed from the final image
+# because this is a non-login service. SQLite is replaced with a
+# checksum-pinned upstream build that retains required FTS5 and extension
+# functionality.
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13
@@ -18,6 +19,32 @@ ARG PYTHON_VERSION=3.13
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
+ARG DEBIAN_SUITE=trixie
+ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u3
+ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u3+rcamarda1
+
+FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
+ARG DEBIAN_SUITE
+ARG GLIBC_DEBIAN_VERSION
+ARG GLIBC_BACKPORT_VERSION
+COPY patches/glibc/ /tmp/glibc-patches/
+RUN set -eux; \
+    sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates devscripts dpkg-dev git quilt; \
+    apt-get build-dep -y --no-install-recommends "glibc=${GLIBC_DEBIAN_VERSION}"; \
+    mkdir -p /build /out; cd /build; \
+    apt-get source "glibc=${GLIBC_DEBIAN_VERSION}"; \
+    cd "glibc-${GLIBC_DEBIAN_VERSION%%-*}"; \
+    for patch in /tmp/glibc-patches/*.patch; do git apply --check "$patch"; git apply "$patch"; done; \
+    DEBFULLNAME="rcamarda390 image build" DEBEMAIL="rcamarda390@users.noreply.github.com" \
+      dch --force-distribution --distribution "${DEBIAN_SUITE}" --newversion "${GLIBC_BACKPORT_VERSION}" \
+      "Backport upstream fixes for CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928."; \
+    DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -B -uc -us -j"$(nproc)"; \
+    cp ../libc6_*_*.deb ../libc-bin_*_*.deb /out/; \
+    dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
+    dpkg-deb -f /out/libc-bin_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"
+
 FROM python:${PYTHON_VERSION}-slim AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -97,7 +124,9 @@ RUN set -e; \
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
 ARG SQLITE_VERSION=3.53.4
+ARG GLIBC_BACKPORT_VERSION
 COPY --from=builder /opt/sqlite/lib/libsqlite3.so* /usr/local/lib/
+COPY --from=glibc_patched /out/ /tmp/glibc/
 
 # Xray's fixed floor for CVE-2026-63072, CVE-2026-54874,
 # CVE-2026-18798, CVE-2026-63076, CVE-2026-63075, CVE-2026-14457,
@@ -108,6 +137,7 @@ ARG OPENSSL_MIN_VERSION=3.5.7-1~deb13u2
 
 RUN apt-get update \
     && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends /tmp/glibc/libc6_*_*.deb /tmp/glibc/libc-bin_*_*.deb \
     && apt-get install -y --no-install-recommends \
         libgomp1 \
         libssl3t64 \
@@ -120,16 +150,12 @@ RUN apt-get update \
             || { echo "$package is below required version $OPENSSL_MIN_VERSION" >&2; exit 1; }; \
        done \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
-    && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
-    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/glibc /var/lib/apt/lists/* \
     && mkdir -p /usr/share/debconf \
     && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
     && chmod 0755 /usr/share/debconf/frontend \
     && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        bsdutils gzip libblkid1 libncursesw6 libsmartcols1 libtinfo6 \
-        libuuid1 ncurses-base util-linux libacl1 libattr1 liblastlog2-2 \
-        libpam-runtime libpam-modules libpam0g libsqlite3-0 \
-        ncurses-bin libmount1 login mount \
+        libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 login passwd \
     && rm -rf /usr/share/debconf \
     && ldconfig
 
@@ -181,10 +207,12 @@ RUN ! command -v pip \
     && ! python -c "import pip" 2>/dev/null \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
-    && for package in libattr1 libpam0g libpam-modules libpam-runtime libsqlite3-0; do \
+    && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0; do \
         package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
         test "$package_state" != "installed" || { echo "$package is still installed" >&2; exit 1; }; \
        done \
+    && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
+    && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
     && python -c "import sqlite3, sqlite_vec; assert sqlite3.sqlite_version == '${SQLITE_VERSION}'; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute(\"insert into docs values ('security fixed')\"); assert db.execute(\"select count(*) from docs where docs match 'fixed'\").fetchone()[0] == 1; db.enable_load_extension(True); db.load_extension(sqlite_vec.loadable_path()); db.execute('create virtual table vectors using vec0(embedding float[2])')" \
     && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1')" \
     && python -c "import gnosis_mcp; print('Verification: gnosis-mcp OK')"
