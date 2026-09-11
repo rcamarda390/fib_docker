@@ -10,35 +10,26 @@ FROM ${UV_IMAGE} AS uvbin
 FROM ${WOLFI_IMAGE} AS builder
 
 ARG LITELLM_VERSION
-ARG LITELLM_COMMIT
 
 RUN apk upgrade --available --no-cache \
-    && apk add --no-cache --upgrade glibc \
-    && apk add --no-cache bash gcc git python3 python3-dev rust openssl-dev libsndfile
+    && apk add --no-cache ca-certificates libsndfile python3
 
 COPY --from=uvbin /uv /usr/local/bin/uv
 
-WORKDIR /src
-RUN git clone --filter=blob:none --no-checkout https://github.com/BerriAI/litellm.git . \
-    && git checkout --detach "${LITELLM_COMMIT}" \
-    && test "$(git rev-parse HEAD)" = "${LITELLM_COMMIT}" \
-    && test "$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" = "${LITELLM_VERSION}"
+ENV PATH="/opt/litellm/bin:${PATH}"
 
-ENV UV_PROJECT_ENVIRONMENT=/opt/litellm \
-    UV_LINK_MODE=copy \
-    PATH="/opt/litellm/bin:${PATH}"
-
-# Use the upstream lock, install only the core gateway/proxy feature set, then
-# raise the Xray-reported components to their stated fix versions.
-RUN uv sync --frozen --no-default-groups --no-editable --extra proxy --python python3 \
+# Install the exact published security release without pip or a local compiler,
+# then raise every supplied Xray component to its stated fix version.
+RUN uv venv --python python3 /opt/litellm \
     && uv pip install --python /opt/litellm/bin/python \
+        "litellm[proxy]==${LITELLM_VERSION}" \
         'RestrictedPython>=8.3,<9' \
         'tornado>=6.5.8' \
         'cryptography>=50.0.0,<51' \
         'aiohttp>=3.14.3,<4' \
         'mcp>=1.28.1,<2' \
         'pyasn1>=0.6.4' \
-    && /opt/litellm/bin/python -c 'from importlib.metadata import version; from packaging.version import Version as V; floors={"RestrictedPython":"8.3","tornado":"6.5.8","cryptography":"50.0.0","aiohttp":"3.14.3","mcp":"1.28.1","pyasn1":"0.6.4"}; assert all(V(version(p)) >= V(v) for p,v in floors.items())' \
+    && /opt/litellm/bin/python -c 'from importlib.metadata import version; from packaging.version import Version as V; floors={"litellm":"1.94.3","RestrictedPython":"8.3","tornado":"6.5.8","cryptography":"50.0.0","aiohttp":"3.14.3","mcp":"1.28.1","pyasn1":"0.6.4"}; assert all(V(version(p)) >= V(v) for p,v in floors.items())' \
     && /opt/litellm/bin/python -c 'import importlib.util; assert importlib.util.find_spec("ddtrace") is None; assert importlib.util.find_spec("pypdf") is None' \
     && /opt/litellm/bin/python -c 'import litellm; import litellm.proxy.proxy_server'
 
