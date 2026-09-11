@@ -155,7 +155,8 @@ RUN apt-get update \
     && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
     && chmod 0755 /usr/share/debconf/frontend \
     && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 login passwd \
+        libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 \
+        libncursesw6 libtinfo6 ncurses-base perl-base login passwd \
     && rm -rf /usr/share/debconf \
     && ldconfig
 
@@ -207,7 +208,8 @@ RUN ! command -v pip \
     && ! python -c "import pip" 2>/dev/null \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
-    && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0; do \
+    && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0 \
+                     libncursesw6 libtinfo6 ncurses-base perl-base; do \
         package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
         test "$package_state" != "installed" || { echo "$package is still installed" >&2; exit 1; }; \
        done \
