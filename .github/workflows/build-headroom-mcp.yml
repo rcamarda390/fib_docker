@@ -6,16 +6,17 @@ on:
     branches: [main]
     paths: ['images/headroom-mcp/**']
 
+# Serialize publications so two pushes cannot calculate the same next tag.
 concurrency:
   group: headroom-mcp-publish
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
+  # Required by the reusable workflow contract. Published-tag revision mode
+  # does not exercise the revision-PR step, but a caller cannot grant less than
+  # permissions declared by the called workflow.
   contents: write
   packages: write
-  # The shared workflow proposes the revision bump as a PR, because
-  # the base branch rejects direct pushes. A reusable workflow runs
-  # with the calling job's token scope, so the grant must be here.
   pull-requests: write
 
 jobs:
@@ -49,5 +50,7 @@ jobs:
       # failing a genuinely hung smoke test in two minutes rather than ten.
       smoke_timeout: 120
       scan: true
-      auto_increment_revision: true
+      # Count tags already published for this upstream version. Failed builds
+      # publish no tag, so they do not consume a revision or open a bump PR.
+      revision_from_published_tag_count: true
       publish: true
