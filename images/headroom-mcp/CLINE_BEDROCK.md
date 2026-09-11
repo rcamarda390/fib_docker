@@ -15,9 +15,12 @@ Both `send_openai_message()` and `stream_openai_message()` are patched.
 
 ## Bedrock prompt caching
 
-Cline's OpenAI-compatible path does not emit Bedrock cache markers. The v41
-hotfix enables prompt caching only when LiteLLM reports that the exact Bedrock
-model supports the OpenAI `cache_control` parameter.
+Cline's OpenAI-compatible path does not emit Bedrock cache markers. The
+downstream hotfix enables prompt caching only when LiteLLM's
+`supports_prompt_caching()` reports that the exact Bedrock model supports it.
+`get_supported_openai_params()` cannot be used for this gate because LiteLLM
+1.96.2 does not include `cache_control` in that list for caching-capable Bedrock
+models.
 
 For supported models, the patch adds:
 
@@ -48,6 +51,14 @@ Tool-config caching is intentionally not injected by this patch because the
 installed LiteLLM 1.96.2 path has a verified native system-message conversion,
 but no equally reliable tool-config marker path was found. This avoids trading
 cache savings for request failures.
+
+## Completion-token compatibility
+
+Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.37.0's
+OpenAI allowlist omits the translated name, so it otherwise places the field in
+`extra_body` and Bedrock rejects it. The downstream patch adds
+`max_completion_tokens` to Headroom's standard OpenAI parameter tuple so it is
+forwarded as a normal LiteLLM argument.
 
 ## Output-token shaping
 
@@ -121,12 +132,20 @@ The patch fails closed when the two call sites it anchors on no longer match.
 
 1. non-streaming Bedrock drops the unsafe `parallel_tool_calls` passthrough;
 2. streaming Bedrock receives the same protection;
-3. supported Bedrock models get native system `cache_control` markers;
+3. supported Bedrock models get native system `cache_control` markers using
+   LiteLLM's prompt-caching capability API;
 4. unsupported Bedrock models receive no cache marker;
 5. `cache_control_injection_points` is never sent;
 6. non-Bedrock providers remain unchanged;
 7. dynamic user/assistant turns are not marked;
-8. list-form system content receives the marker on its last block.
+8. list-form system content receives the marker on its last block;
+9. `max_completion_tokens` is forwarded as a standard argument, not through
+   `extra_body`.
+
+This is a temporary local carry for
+[headroomlabs-ai/headroom#3554](https://github.com/headroomlabs-ai/headroom/issues/3554).
+Remove it once Headroom releases the fix, then re-verify that allowed-request
+behavior is unchanged.
 
 After deployment, verify a sufficiently large stable Cline request reports
 cache creation tokens on the first call and cache read tokens on a repeated

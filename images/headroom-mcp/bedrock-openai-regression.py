@@ -3,6 +3,7 @@
 import asyncio
 
 import headroom.backends.litellm as module
+import litellm.utils
 
 
 class StopCall(RuntimeError):
@@ -26,16 +27,14 @@ async def capture_nonstream(provider: str, body: dict, *, cache_supported: bool 
         raise StopCall("captured")
 
     original_completion = module.acompletion
-    original_supported = module.litellm.get_supported_openai_params
+    original_supported = litellm.utils.supports_prompt_caching
     module.acompletion = fake
-    module.litellm.get_supported_openai_params = (
-        lambda **_: ["cache_control"] if cache_supported else ["tools"]
-    )
+    litellm.utils.supports_prompt_caching = lambda **_: cache_supported
     try:
         await backend(provider).send_openai_message(body, {})
     finally:
         module.acompletion = original_completion
-        module.litellm.get_supported_openai_params = original_supported
+        litellm.utils.supports_prompt_caching = original_supported
     return captured
 
 
@@ -47,17 +46,15 @@ async def capture_stream(provider: str, body: dict, *, cache_supported: bool = T
         raise StopCall("captured")
 
     original_completion = module.acompletion
-    original_supported = module.litellm.get_supported_openai_params
+    original_supported = litellm.utils.supports_prompt_caching
     module.acompletion = fake
-    module.litellm.get_supported_openai_params = (
-        lambda **_: ["cache_control"] if cache_supported else ["tools"]
-    )
+    litellm.utils.supports_prompt_caching = lambda **_: cache_supported
     try:
         async for _ in backend(provider).stream_openai_message(body, {}):
             pass
     finally:
         module.acompletion = original_completion
-        module.litellm.get_supported_openai_params = original_supported
+        litellm.utils.supports_prompt_caching = original_supported
     return captured
 
 
@@ -87,6 +84,7 @@ async def main():
             }
         ],
         "parallel_tool_calls": True,
+        "max_completion_tokens": 20,
     }
 
     # Supported Bedrock models: both OpenAI paths strip the unsafe passthrough
@@ -94,6 +92,8 @@ async def main():
     for capture in (capture_nonstream, capture_stream):
         got = await capture("bedrock", body, cache_supported=True)
         assert "parallel_tool_calls" not in got.get("extra_body", {})
+        assert got["max_completion_tokens"] == 20
+        assert "max_completion_tokens" not in got.get("extra_body", {})
         assert "cache_control_injection_points" not in got
         assert_system_cached(got["messages"])
 
