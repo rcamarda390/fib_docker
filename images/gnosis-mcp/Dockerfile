@@ -156,7 +156,7 @@ RUN apt-get update \
     && chmod 0755 /usr/share/debconf/frontend \
     && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
         libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 \
-        libncursesw6 libtinfo6 ncurses-base perl-base login passwd \
+        perl-base login passwd \
     && rm -rf /usr/share/debconf \
     && ldconfig
 
@@ -209,10 +209,12 @@ RUN ! command -v pip \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
     && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0 \
-                     libncursesw6 libtinfo6 ncurses-base perl-base; do \
+                     perl-base; do \
         package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
         test "$package_state" != "installed" || { echo "$package is still installed" >&2; exit 1; }; \
        done \
+    && /bin/bash --noprofile --norc -c true \
+    && python -c "import curses, readline; curses.setupterm(term='xterm')" \
     && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
     && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
     && python -c "import sqlite3, sqlite_vec; assert sqlite3.sqlite_version == '${SQLITE_VERSION}'; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute(\"insert into docs values ('security fixed')\"); assert db.execute(\"select count(*) from docs where docs match 'fixed'\").fetchone()[0] == 1; db.enable_load_extension(True); db.load_extension(sqlite_vec.loadable_path()); db.execute('create virtual table vectors using vec0(embedding float[2])')" \
