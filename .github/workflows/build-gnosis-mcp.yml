@@ -6,12 +6,17 @@ on:
     branches: [main]
     paths: ['images/gnosis-mcp/**']
 
+# Serialize publications so two dispatches cannot calculate the same next tag.
+concurrency:
+  group: gnosis-mcp-publish
+  cancel-in-progress: false
+
 permissions:
+  # Required by the reusable workflow contract. Published-tag revision mode
+  # does not exercise the revision-PR step, but a caller cannot grant less than
+  # permissions declared by the called workflow.
   contents: write
   packages: write
-  # The shared workflow proposes the revision bump as a PR, because
-  # the base branch rejects direct pushes. A reusable workflow runs
-  # with the calling job's token scope, so the grant must be here.
   pull-requests: write
 
 jobs:
@@ -33,5 +38,7 @@ jobs:
       smoke_command: check
       scan: true
       block_on_scan_failure: true
-      auto_increment_revision: true
+      # Count tags already published for this upstream version. Failed builds
+      # publish no tag, so they do not consume a revision or open a bump PR.
+      revision_from_published_tag_count: true
       publish: ${{ github.event_name != 'pull_request' }}
