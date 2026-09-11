@@ -1,18 +1,21 @@
 # syntax=docker/dockerfile:1.7
 
-ARG PYTHON_IMAGE=python:3.13-slim-bookworm
-ARG LITELLM_VERSION=1.91.0
-ARG LITELLM_COMMIT=0519dbf25b290dd3a646bf40dc93d40ae36901aa
+ARG WOLFI_IMAGE=cgr.dev/chainguard/wolfi-base@sha256:42df77a9974d6ec8b17a5ee8bc23b532600a44d705acef2409e0933c1251b45f
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.11.7@sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a
+ARG LITELLM_VERSION=1.94.3
+ARG LITELLM_COMMIT=397859f6722909451ae573229aa9daef7ed960c9
 
-FROM ${PYTHON_IMAGE} AS builder
+FROM ${UV_IMAGE} AS uvbin
+
+FROM ${WOLFI_IMAGE} AS builder
 
 ARG LITELLM_VERSION
 ARG LITELLM_COMMIT
 
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends build-essential git \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk upgrade --no-cache \
+    && apk add --no-cache bash gcc git python3 python3-dev rust openssl-dev libsndfile
+
+COPY --from=uvbin /uv /usr/local/bin/uv
 
 WORKDIR /src
 RUN git clone --filter=blob:none --no-checkout https://github.com/BerriAI/litellm.git . \
@@ -20,18 +23,32 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/BerriAI/litell
     && test "$(git rev-parse HEAD)" = "${LITELLM_COMMIT}" \
     && test "$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" = "${LITELLM_VERSION}"
 
-RUN python -m venv /opt/litellm \
-    && /opt/litellm/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/litellm/bin/pip install --no-cache-dir '.[proxy]' \
+ENV UV_PROJECT_ENVIRONMENT=/opt/litellm \
+    UV_LINK_MODE=copy \
+    PATH="/opt/litellm/bin:${PATH}"
+
+# Use the upstream lock, install only the core gateway/proxy feature set, then
+# raise the Xray-reported components to their stated fix versions.
+RUN uv sync --frozen --no-default-groups --no-editable --extra proxy --python python3 \
+    && uv pip install --python /opt/litellm/bin/python \
+        'RestrictedPython>=8.3,<9' \
+        'tornado>=6.5.8' \
+        'cryptography>=50.0.0,<51' \
+        'aiohttp>=3.14.3,<4' \
+        'mcp>=1.28.1,<2' \
+        'pyasn1>=0.6.4' \
+    && /opt/litellm/bin/python -c 'from importlib.metadata import version; from packaging.version import Version as V; floors={"RestrictedPython":"8.3","tornado":"6.5.8","cryptography":"50.0.0","aiohttp":"3.14.3","mcp":"1.28.1","pyasn1":"0.6.4"}; assert all(V(version(p)) >= V(v) for p,v in floors.items())' \
+    && /opt/litellm/bin/python -c 'import importlib.util; assert importlib.util.find_spec("ddtrace") is None; assert importlib.util.find_spec("pypdf") is None' \
     && /opt/litellm/bin/python -c 'import litellm; import litellm.proxy.proxy_server'
 
-FROM ${PYTHON_IMAGE} AS runtime
+FROM ${WOLFI_IMAGE} AS runtime
 
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends ca-certificates curl libsndfile1 \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 10001 litellm
+ARG LITELLM_VERSION
+ARG LITELLM_COMMIT
+
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates libsndfile python3 \
+    && adduser -D -u 10001 litellm
 
 COPY --from=builder /opt/litellm /opt/litellm
 
@@ -44,7 +61,7 @@ USER 10001:10001
 EXPOSE 4000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl --fail --silent http://127.0.0.1:4000/health/liveliness >/dev/null || exit 1
+    CMD python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:4000/health/liveliness", timeout=5)'
 
 LABEL org.opencontainers.image.title="litellm" \
       org.opencontainers.image.description="LiteLLM AI Gateway built from pinned upstream source" \

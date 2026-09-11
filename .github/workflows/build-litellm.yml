@@ -33,5 +33,6 @@ jobs:
       smoke_healthcheck_port: 4000
       smoke_healthcheck_path: /health/liveliness
       scan: true
+      block_on_scan_failure: true
       revision_from_published_tag_count: true
       publish: ${{ github.event_name != 'pull_request' }}
