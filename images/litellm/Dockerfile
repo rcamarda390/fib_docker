@@ -12,7 +12,8 @@ FROM ${WOLFI_IMAGE} AS builder
 ARG LITELLM_VERSION
 ARG LITELLM_COMMIT
 
-RUN apk upgrade --no-cache \
+RUN apk upgrade --available --no-cache \
+    && apk add --no-cache --upgrade glibc \
     && apk add --no-cache bash gcc git python3 python3-dev rust openssl-dev libsndfile
 
 COPY --from=uvbin /uv /usr/local/bin/uv
@@ -46,7 +47,8 @@ FROM ${WOLFI_IMAGE} AS runtime
 ARG LITELLM_VERSION
 ARG LITELLM_COMMIT
 
-RUN apk upgrade --no-cache \
+RUN apk upgrade --available --no-cache \
+    && apk add --no-cache --upgrade glibc \
     && apk add --no-cache ca-certificates libsndfile python3 \
     && adduser -D -u 10001 litellm
 
