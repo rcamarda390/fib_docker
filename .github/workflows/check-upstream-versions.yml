@@ -51,6 +51,7 @@ jobs:
           IMAGES=(
             "bifrost-mcp|maximhq/bifrost|transports/v|BIFROST_COMMIT"
             "headroom-mcp|headroomlabs-ai/headroom|v|HEADROOM_COMMIT"
+            "litellm|BerriAI/litellm|v|"
             "sqz-mcp|ojuschugh1/sqz|v|SQZ_COMMIT"
             "atlassian-mcp|sooperset/mcp-atlassian|v|"
           )
