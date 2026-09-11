@@ -1,8 +1,8 @@
 name: litellm
-upstream_version: 1.91.0
+upstream_version: 1.94.3
 revision: 1
 build_args:
-  LITELLM_COMMIT: 0519dbf25b290dd3a646bf40dc93d40ae36901aa
+  LITELLM_COMMIT: 397859f6722909451ae573229aa9daef7ed960c9
 publish:
   ghcr: true
   dockerhub: true
