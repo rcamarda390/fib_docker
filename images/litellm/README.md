@@ -1,10 +1,9 @@
 # LiteLLM AI Gateway
 
-Builds LiteLLM v1.94.3 from the exact upstream commit recorded in
-`image.yaml`. Version 1.94.3 is the first release that fixes the
+Builds the exact published LiteLLM v1.94.3 Python distribution. Version 1.94.3 is the first release that fixes the
 LiteLLM CVE-2026-84377 finding reported against v1.91.0.
 
-The image uses LiteLLM's pinned Wolfi base and frozen `uv.lock`, installs only
+The image uses LiteLLM's pinned Wolfi base and `uv` without pip or a compiler, installs only
 the core proxy feature set, and runs the OpenAI-compatible gateway on port 4000
 as an unprivileged user. Downstream minimums enforce the Xray fix versions for
 RestrictedPython, Tornado, cryptography, aiohttp, MCP, and pyasn1. Optional
