@@ -19,7 +19,7 @@ ENV PATH="/opt/litellm/bin:${PATH}"
 
 # Install the exact published security release without pip or a local compiler,
 # then raise every supplied Xray component to its stated fix version.
-RUN uv venv --python python3 /opt/litellm \
+RUN UV_NO_MANAGED_PYTHON=1 uv venv --python /usr/bin/python3 /opt/litellm \
     && uv pip install --python /opt/litellm/bin/python \
         "litellm[proxy]==${LITELLM_VERSION}" \
         'RestrictedPython>=8.3,<9' \
