@@ -3,7 +3,6 @@
 ARG WOLFI_IMAGE=cgr.dev/chainguard/wolfi-base@sha256:42df77a9974d6ec8b17a5ee8bc23b532600a44d705acef2409e0933c1251b45f
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.11.7@sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a
 ARG LITELLM_VERSION=1.94.3
-ARG LITELLM_COMMIT=397859f6722909451ae573229aa9daef7ed960c9
 
 FROM ${UV_IMAGE} AS uvbin
 
@@ -36,7 +35,6 @@ RUN uv venv --python python3 /opt/litellm \
 FROM ${WOLFI_IMAGE} AS runtime
 
 ARG LITELLM_VERSION
-ARG LITELLM_COMMIT
 
 RUN apk upgrade --available --no-cache \
     && apk add --no-cache --upgrade glibc \
@@ -61,7 +59,7 @@ LABEL org.opencontainers.image.title="litellm" \
       org.opencontainers.image.source="https://github.com/BerriAI/litellm" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${LITELLM_VERSION}" \
-      org.opencontainers.image.revision="${LITELLM_COMMIT}"
+      org.opencontainers.image.revision="${LITELLM_VERSION}"
 
 ENTRYPOINT ["litellm"]
 CMD ["--port", "4000"]
