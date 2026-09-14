@@ -6,9 +6,9 @@
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
-# Security: Python 3.13 on Debian Trixie plus a coherently rebuilt glibc pair
-# carrying the upstream fixes for CVE-2026-5435, CVE-2026-5928, and
-# CVE-2026-5450. PAM and build utilities are removed from the final image
+# Security: Python 3.13 on Debian Trixie plus a coherently rebuilt glibc pair.
+# Debian deb13u4 supplies CVE-2026-5928. Local patches retain the other
+# required glibc fixes. PAM and build utilities are removed from the final image
 # because this is a non-login service. SQLite is replaced with a
 # checksum-pinned upstream build that retains required FTS5 and extension
 # functionality.
@@ -48,7 +48,7 @@ RUN set -eux; \
     done; \
     DEBFULLNAME="rcamarda390 image build" DEBEMAIL="rcamarda390@users.noreply.github.com" \
       dch --force-distribution --distribution "${DEBIAN_SUITE}" --newversion "${GLIBC_BACKPORT_VERSION}" \
-      "Backport upstream fixes for CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928."; \
+      "Rebuild from Debian deb13u4; retain local backports for CVE-2026-5435 and CVE-2026-5450."; \
     DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -B -uc -us -j"$(nproc)"; \
     cp ../libc6_*_*.deb ../libc-bin_*_*.deb /out/; \
     dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
