@@ -20,8 +20,8 @@ ARG PYTHON_VERSION=3.13
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
 ARG DEBIAN_SUITE=trixie
-ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u3
-ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u3+rcamarda1
+ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u4
+ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u4+rcamarda1
 
 FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
 ARG DEBIAN_SUITE
@@ -134,6 +134,8 @@ COPY --from=glibc_patched /out/ /tmp/glibc/
 # Keep this as a minimum rather than an exact pin so later Debian security
 # revisions remain eligible. The build fails closed if the mirror is stale.
 ARG OPENSSL_MIN_VERSION=3.5.7-1~deb13u2
+ARG LIBPCRE2_MIN_VERSION=10.46-1~deb13u2
+ARG GZIP_MIN_VERSION=1.13-1+deb13u1
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -143,11 +145,23 @@ RUN apt-get update \
         libssl3t64 \
         openssl \
         openssl-provider-legacy \
+        libpcre2-8-0 \
+        gzip \
     && for package in libssl3t64 openssl openssl-provider-legacy; do \
         installed_version="$(dpkg-query -W -f='${Version}' "$package")"; \
         echo "$package=$installed_version"; \
         dpkg --compare-versions "$installed_version" ge "$OPENSSL_MIN_VERSION" \
             || { echo "$package is below required version $OPENSSL_MIN_VERSION" >&2; exit 1; }; \
+       done \
+    && for package_and_floor in \
+        "libpcre2-8-0:$LIBPCRE2_MIN_VERSION" \
+        "gzip:$GZIP_MIN_VERSION"; do \
+        package="${package_and_floor%%:*}"; \
+        floor="${package_and_floor#*:}"; \
+        installed_version="$(dpkg-query -W -f='${Version}' "$package")"; \
+        echo "$package=$installed_version"; \
+        dpkg --compare-versions "$installed_version" ge "$floor" \
+            || { echo "$package is below required version $floor" >&2; exit 1; }; \
        done \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
     && rm -rf /tmp/glibc /var/lib/apt/lists/* \
@@ -218,7 +232,7 @@ RUN ! command -v pip \
     && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
     && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
     && python -c "import sqlite3, sqlite_vec; assert sqlite3.sqlite_version == '${SQLITE_VERSION}'; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute(\"insert into docs values ('security fixed')\"); assert db.execute(\"select count(*) from docs where docs match 'fixed'\").fetchone()[0] == 1; db.enable_load_extension(True); db.load_extension(sqlite_vec.loadable_path()); db.execute('create virtual table vectors using vec0(embedding float[2])')" \
-    && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1')" \
+    && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1'); assert Version(version('PyJWT')) >= Version('2.14.0')" \
     && python -c "import gnosis_mcp; print('Verification: gnosis-mcp OK')"
 
 ARG GNOSIS_VERSION=0.14.1
