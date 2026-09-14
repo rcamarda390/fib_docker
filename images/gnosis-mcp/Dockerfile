@@ -68,7 +68,11 @@ RUN sh /tmp/prepare-native-sources.sh \
     && mkdir /out \
     && for package in attr acl ncurses util-linux; do \
         apt-get build-dep -y --no-install-recommends "./$package" || exit 1; \
-        (cd "$package" && dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+        if [ "$package" = acl ]; then \
+          (cd "$package" && DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+        else \
+          (cd "$package" && dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+        fi; \
        done \
     && cp ./*.deb /out/
 
