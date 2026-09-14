@@ -11,7 +11,7 @@ provided. These are Debian base-image packages, not Python dependencies.
 | --- | --- | --- | --- |
 | CVE-2026-54369 | libacl1 2.3.2-2+b1 | 7.1 | Rebuild ACL 2.4.0-1 on Trixie; retain library and exercise coreutils/tar callers. |
 | CVE-2026-5435 | libc-bin 2.41-12+deb13u4+rcamarda1 | 7.3 | Existing upstream backport retained in the coherent libc6/libc-bin rebuild. Scanner recognition remains unconfirmed. |
-| CVE-2025-69720 | ncurses-bin 6.5+20250216-2 | 7.8 | Rebuild ncurses 6.6+20260608-2; upgrade installed sibling libraries and terminfo together. |
+| CVE-2025-69720 | ncurses-bin 6.5+20250216-2 | 7.8 | Rebuild ncurses 6.6+20251231-1, Debian's first fixed release; upgrade installed sibling libraries and terminfo together. |
 | CVE-2026-85091 | zlib1g 1:1.3.dfsg+really1.3.1-1+b1 | 7.4 | Unresolved: no confirmed Debian fix. Retain Python's required zlib library. |
 | CVE-2026-78410 | liblastlog2-2 2.41.5-0+deb13u1 | 7.8 | Rebuild util-linux 2.41.6 with Trixie packaging; upgrade all installed siblings. |
 | CVE-2026-76642 | util-linux 2.41.5-0+deb13u1 | 7.8 | Same util-linux 2.41.6 rebuild. |
@@ -23,7 +23,7 @@ provided. These are Debian base-image packages, not Python dependencies.
 
 - [Debian ACL tracker](https://security-tracker.debian.org/tracker/CVE-2026-54369): fixed in 2.4.0-1; Trixie has no DSA. New ABI can conflict with existing callers, so final-image tests exercise tar and cp.
 - [Debian attr tracker](https://security-tracker.debian.org/tracker/CVE-2026-54371): fixed in 1:2.6.0-1; Trixie has no DSA. Use the complete release, not a partial walk-tree backport.
-- [Debian ncurses tracker](https://security-tracker.debian.org/tracker/CVE-2025-69720): fixed from 6.6+20251231-1. The selected 6.6+20260608-2 exceeds it.
+- [Debian ncurses tracker](https://security-tracker.debian.org/tracker/CVE-2025-69720): fixed from 6.6+20251231-1. The selected source is that first fixed release because its Debian source package builds with the Trixie toolchain.
 - [util-linux 2.41.6 release notes](https://github.com/util-linux/util-linux/blob/v2.41.6/Documentation/releases/v2.41.6-ReleaseNotes): stable-branch security fixes for 76642, 78410 and 78408.
 - [Upstream 78409 advisory](https://github.com/util-linux/util-linux/security/advisories/GHSA-8f2p-47x3-43mv): affected >=2.42; lists 2.41.6 and 2.42.3 as patched releases.
 - [Debian glibc tracker](https://security-tracker.debian.org/tracker/CVE-2026-5435): stock Trixie remains affected. Existing checked-in patch identifies upstream 2.41 commit 0e8c56b386d72ba2ddf15784423f2e894c63a241. A custom package revision alone does not prove Xray recognizes the backport.
