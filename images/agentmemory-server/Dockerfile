@@ -29,6 +29,7 @@ LABEL org.opencontainers.image.title="agentmemory" \
 # after all apt work, then fail the build if it remains installed.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates tini gosu curl \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
  && test "$(dpkg-query -W -f='${Status}' perl-base 2>/dev/null || true)" != "install ok installed" \
  && ! command -v perl \
@@ -110,6 +111,13 @@ RUN set -eux; \
     test -s "${model_dir}/tokenizer_config.json"; \
     test -s "${model_dir}/onnx/model_quantized.onnx"; \
     chmod -R a-w /opt/agentmemory/models /opt/agentmemory/transformers-cache
+
+# curl is needed only while the connected GitHub build downloads the pinned
+# model. It is not used by AgentMemory at runtime; remove it and its unused
+# libraries from the final image.
+RUN apt-get purge -y --auto-remove curl \
+ && ! command -v curl \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY --chmod=0644 transformers-offline.mjs /opt/agentmemory/transformers-offline.mjs
 COPY --chmod=0755 offline-embedding-smoke.mjs /opt/agentmemory/offline-embedding-smoke.mjs
