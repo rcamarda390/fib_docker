@@ -5,10 +5,13 @@ ARG HEADROOM_COMMIT=32d7ca4577d599b8a5f811ada74cf31504302c9d
 ARG PYTHON_VERSION=3.13.15
 ARG PYTHON_ABI=3.13
 ARG DEBIAN_SUITE=trixie
-ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u3
-ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u3+rcamarda1
+ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u4
+ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u4+rcamarda1
 ARG PIP_VERSION=26.2.1
 ARG LITELLM_VERSION=1.96.2
+ARG PYJWT_VERSION=2.14.0
+ARG TOKENIZERS_VERSION=0.23.1
+ARG TRANSFORMERS_VERSION=5.17.0
 ARG RUSTUP_VERSION=1.28.2
 ARG SQLITE_VERSION=3.53.4
 ARG SQLITE_AUTOCONF=3530400
@@ -34,14 +37,20 @@ RUN set -eux; \
     apt-get source "glibc=${GLIBC_DEBIAN_VERSION}"; \
     cd "glibc-${GLIBC_DEBIAN_VERSION%%-*}"; \
     for patch in /tmp/glibc-patches/*.patch; do \
-      git apply --check "$patch"; \
-      git apply "$patch"; \
+      if git apply --check "$patch"; then \
+        git apply "$patch"; \
+      elif git apply --reverse --check "$patch"; then \
+        echo "Patch already present in Debian source: $patch"; \
+      else \
+        echo "Patch is neither applicable nor already present: $patch" >&2; \
+        exit 1; \
+      fi; \
     done; \
     DEBFULLNAME="rcamarda390 image build" \
       DEBEMAIL="rcamarda390@users.noreply.github.com" \
       dch --force-distribution --distribution "${DEBIAN_SUITE}" \
         --newversion "${GLIBC_BACKPORT_VERSION}" \
-        "Backport upstream fixes for CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928."; \
+        "Rebuild from Debian deb13u4; retain local backports for CVE-2026-5435 and CVE-2026-5450."; \
     DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -B -uc -us -j"$(nproc)"; \
     cp ../libc6_*_*.deb ../libc-bin_*_*.deb /out/; \
     dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
@@ -60,6 +69,9 @@ ARG HEADROOM_VERSION
 ARG PYTHON_VERSION
 ARG PIP_VERSION
 ARG LITELLM_VERSION
+ARG PYJWT_VERSION
+ARG TOKENIZERS_VERSION
+ARG TRANSFORMERS_VERSION
 ARG RUSTUP_VERSION
 ARG SQLITE_VERSION
 ARG SQLITE_AUTOCONF
@@ -145,6 +157,27 @@ RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 RUN uv pip install --python /opt/venv/bin/python --upgrade-package litellm \
       "litellm==${LITELLM_VERSION}" \
     && test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("litellm"))')" = "$LITELLM_VERSION" \
+    && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
+# Xray reports these high/critical PyJWT advisories against the upstream lock's
+# 2.13.0 release: XRAY-1076251 (CVSS 9.1, CWE-347), XRAY-1076205,
+# XRAY-1076201, XRAY-1076198, XRAY-1076197, XRAY-1076195, and XRAY-1076185
+# (each CVSS 7.4). Their fixed floor is 2.14.0. CVE-2026-85670 separately
+# fixes Tokenizers 0.22.2 in 0.23.1; Transformers 5.13.1 caps Tokenizers at
+# 0.23.0, so move both packages together within Headroom's declared >=5.5,<6
+# compatibility range. This downstream override is scoped to these package
+# families; remove it when Headroom locks these or newer releases itself.
+RUN uv pip install --python /opt/venv/bin/python \
+      --upgrade-package PyJWT \
+      --upgrade-package tokenizers \
+      --upgrade-package transformers \
+      "PyJWT==${PYJWT_VERSION}" \
+      "tokenizers==${TOKENIZERS_VERSION}" \
+      "transformers==${TRANSFORMERS_VERSION}" \
+    && PATH="/opt/venv/bin:${PATH}" python -c \
+      "import importlib.metadata, jwt, tokenizers, transformers; \
+       assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
+       assert tokenizers.__version__ == '${TOKENIZERS_VERSION}'; \
+       assert transformers.__version__ == '${TRANSFORMERS_VERSION}'" \
     && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
 # The setuptools/msgpack upgrades that used to live here targeted packages
 # that Headroom does not install: neither appears in the proxy+bedrock
@@ -397,9 +430,12 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      ssl.create_default_context(); \
      print(f'Verification: Python stdlib (SQLite {sqlite3.sqlite_version}, FTS5, ssl, compression) OK')" \
  && PATH="/opt/venv/bin:${PATH}" python -c \
-    "import boto3, botocore, importlib.metadata, litellm; \
+    "import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers; \
      assert importlib.metadata.version('litellm') == '${LITELLM_VERSION}'; \
-     print(f'Verification: LiteLLM {importlib.metadata.version(\"litellm\")}; AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
+     assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
+     assert tokenizers.__version__ == '${TOKENIZERS_VERSION}'; \
+     assert transformers.__version__ == '${TRANSFORMERS_VERSION}'; \
+     print(f'Verification: LiteLLM {importlib.metadata.version(\"litellm\")}, PyJWT {importlib.metadata.version(\"PyJWT\")}, Tokenizers {tokenizers.__version__}, Transformers {transformers.__version__}; AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
  && { PATH="/opt/venv/bin:${PATH}" python -c \
     "import awscrt; print(f'  awscrt {awscrt.__version__} also available')" || true; } \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
@@ -422,9 +458,3 @@ VOLUME ["/home/headroom/.headroom"]
 
 LABEL org.opencontainers.image.title="headroom-mcp" \
       org.opencontainers.image.description="Headroom MCP server for context optimization" \
-      org.opencontainers.image.source="https://github.com/headroomlabs-ai/headroom" \
-      org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.version="${HEADROOM_VERSION}" \
-      org.opencontainers.image.revision="${HEADROOM_COMMIT}"
-
-ENTRYPOINT ["/usr/local/bin/headroom-entrypoint"]
