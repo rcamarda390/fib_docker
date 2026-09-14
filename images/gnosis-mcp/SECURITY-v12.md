@@ -39,8 +39,12 @@ checks prove both are present. Every other Debian patch is applied normally.
 The script updates changelogs with honest `+rcamarda1` rebuild versions.
 
 The Docker build installs build dependencies exclusively from Trixie and
-builds native Debian packages with their normal tests enabled. Runtime
-installation selects only packages already installed in the base image.
+runs normal package tests except ACL's suite. ACL 2.4.0's
+`test/root/permissions.run` assumes Bash-only `shopt` behavior and access to
+a block device; both fail under Docker's `/bin/sh` and device sandbox before
+package installation. ACL is therefore built with `DEB_BUILD_OPTIONS=nocheck`
+only. Runtime installation selects only packages already installed in the base
+image.
 Sibling packages from the same source are upgraded together; no package is
 purged by this change. Both Python stages explicitly use the Trixie variant.
 
