@@ -16,6 +16,8 @@ ARG RUSTUP_VERSION=1.28.2
 ARG SQLITE_VERSION=3.53.4
 ARG SQLITE_AUTOCONF=3530400
 ARG SQLITE_SHA3=454e45f61c6bd75b7420e7190732dea03ce6639c63ada47bbc592f67fc340338
+ARG ZLIB_VERSION=1.3.2
+ARG ZLIB_SHA256=b99a0b86c0ba9360ec7e78c4f1e43b1cbdf1e6936c8fa0f6835c0cd694a495a1
 
 FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
 ARG DEBIAN_SUITE
@@ -76,6 +78,8 @@ ARG RUSTUP_VERSION
 ARG SQLITE_VERSION
 ARG SQLITE_AUTOCONF
 ARG SQLITE_SHA3
+ARG ZLIB_VERSION
+ARG ZLIB_SHA256
 
 ENV CARGO_HOME=/usr/local/cargo \
     RUSTUP_HOME=/usr/local/rustup \
@@ -119,6 +123,23 @@ RUN set -eux; \
     ln -s libsqlite3.so.0.8.6 /opt/sqlite/lib/libsqlite3.so.0; \
     LD_LIBRARY_PATH=/opt/sqlite/lib python -c "import sqlite3; assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute('insert into docs values (\"headroom\")'); assert db.execute('select body from docs where docs match \"headroom\"').fetchone() == ('headroom',)"; \
     rm -rf /tmp/sqlite.tar.gz "/tmp/sqlite-autoconf-${SQLITE_AUTOCONF}"
+# Xray fixes CVE-2026-85091 and CVE-2026-27171 in zlib 1.3.2. Debian
+# Trixie's zlib1g release remains at 1.3.1, while Python's stdlib module needs
+# libz.so.1 at runtime. Build the checksum-pinned upstream release, retain its
+# ABI-compatible shared library, and remove the older Debian package only
+# after every apt operation is complete.
+RUN set -eux; \
+    curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+      "https://github.com/madler/zlib/archive/refs/tags/v${ZLIB_VERSION}.tar.gz" \
+      --output /tmp/zlib.tar.gz; \
+    echo "${ZLIB_SHA256}  /tmp/zlib.tar.gz" | sha256sum --check --status; \
+    tar -xzf /tmp/zlib.tar.gz -C /tmp; \
+    cd "/tmp/zlib-${ZLIB_VERSION}"; \
+    ./configure --prefix=/opt/zlib; \
+    make -j"$(nproc)" install; \
+    LD_LIBRARY_PATH=/opt/zlib/lib python -c \
+      "import zlib; assert zlib.ZLIB_RUNTIME_VERSION == '${ZLIB_VERSION}', zlib.ZLIB_RUNTIME_VERSION"; \
+    rm -rf /tmp/zlib.tar.gz "/tmp/zlib-${ZLIB_VERSION}"
 # Checksums come from the matching rustup-init.sha256 file in the Rust release
 # archive.
 RUN set -eux; \
@@ -286,6 +307,7 @@ ARG GLIBC_BACKPORT_VERSION
 ARG PYTHON_VERSION
 ARG PYTHON_ABI
 ARG SQLITE_VERSION
+ARG ZLIB_VERSION
 
 ENV HEADROOM_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1 \
@@ -396,6 +418,7 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 # Skipping that cleanup is harmless: it only drops the package's entries from
 # the debconf database. dpkg removes the package's files either way.
 COPY --from=builder /opt/sqlite/lib/ /usr/local/lib/
+COPY --from=builder /opt/zlib/lib/ /usr/local/lib/
 RUN ldconfig \
  && rm -f /usr/local/lib/python${PYTHON_ABI}/lib-dynload/_curses*.so \
  && mkdir -p /usr/share/debconf \
@@ -405,7 +428,7 @@ RUN ldconfig \
       gzip ncurses-bin ncurses-base libtinfo6 libncursesw6 \
       libacl1 libattr1 \
       libpam-runtime libpam-modules libpam-modules-bin libpam0g libtasn1-6 \
-      libsqlite3-0 openssl \
+      libsqlite3-0 zlib1g openssl \
  && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/headroom-cache /opt/headroom-cache
@@ -424,6 +447,7 @@ RUN find /usr/local/lib/python${PYTHON_ABI} /opt/venv \
 RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import importlib.util, ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
      assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; \
+     assert zlib.ZLIB_RUNTIME_VERSION == '${ZLIB_VERSION}', zlib.ZLIB_RUNTIME_VERSION; \
      sqlite3.connect(':memory:').execute('select 1').fetchone(); \
      db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute('insert into docs values (\"headroom\")'); assert db.execute('select body from docs where docs match \"headroom\"').fetchone() == ('headroom',); \
      assert importlib.util.find_spec('_curses') is None; \
@@ -441,10 +465,9 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
  && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
- && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1' \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u2' \
- && dpkg-query -W libc6 libc-bin zlib1g libssl3t64 \
- && ! dpkg-query -W libsqlite3-0 libpam-modules-bin libncursesw6 openssl 2>/dev/null \
+ && dpkg-query -W libc6 libc-bin libssl3t64 \
+ && ! dpkg-query -W libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl 2>/dev/null \
  && ! command -v perl \
  && ! command -v gzip \
  && ! command -v tput \
@@ -455,6 +478,3 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 USER headroom
 WORKDIR /home/headroom
 VOLUME ["/home/headroom/.headroom"]
-
-LABEL org.opencontainers.image.title="headroom-mcp" \
-      org.opencontainers.image.description="Headroom MCP server for context optimization" \
