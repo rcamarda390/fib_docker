@@ -54,7 +54,25 @@ RUN set -eux; \
     dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
     dpkg-deb -f /out/libc-bin_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"
 
-FROM python:${PYTHON_VERSION}-slim AS builder
+# Xray v12: libacl1 2.3.2-2+b1 (CVE-2026-54369), libattr1 1:2.5.2-3
+# (CVE-2026-54371), ncurses-bin 6.5+20250216-2 (CVE-2025-69720), and
+# util-linux family 2.41.5-0+deb13u1 (CVE-2026-76642/78408/78409/78410).
+# See SECURITY-v12.md for fixed releases, source evidence and residual findings.
+# Rebuild Debian packages on Trixie; do not import sid runtime binaries.
+FROM debian:${DEBIAN_SUITE}-slim AS native_patched
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git dpkg-dev build-essential
+WORKDIR /build
+COPY prepare-native-sources.sh /tmp/prepare-native-sources.sh
+RUN sh /tmp/prepare-native-sources.sh \
+    && mkdir /out \
+    && for package in attr acl ncurses util-linux; do \
+        apt-get build-dep -y --no-install-recommends "./$package" || exit 1; \
+        (cd "$package" && dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+       done \
+    && cp ./*.deb /out/
+
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -130,12 +148,13 @@ RUN set -e; \
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
 
 ARG SQLITE_VERSION=3.53.4
 ARG GLIBC_BACKPORT_VERSION
 COPY --from=builder /opt/sqlite/lib/libsqlite3.so* /usr/local/lib/
 COPY --from=glibc_patched /out/ /tmp/glibc/
+COPY --from=native_patched /out/ /tmp/native/
 
 # Xray's fixed floor for CVE-2026-63072, CVE-2026-54874,
 # CVE-2026-18798, CVE-2026-63076, CVE-2026-63075, CVE-2026-14457,
@@ -149,6 +168,14 @@ ARG GZIP_MIN_VERSION=1.13-1+deb13u1
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends /tmp/glibc/libc6_*_*.deb /tmp/glibc/libc-bin_*_*.deb \
+    && set -- \
+    && for archive in /tmp/native/*.deb; do \
+        package="$(dpkg-deb -f "$archive" Package)"; \
+        state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
+        if [ "$state" = installed ]; then set -- "$@" "$archive"; fi; \
+       done \
+    && test "$#" -gt 0 \
+    && apt-get install -y --no-install-recommends "$@" \
     && apt-get install -y --no-install-recommends \
         libgomp1 \
         libssl3t64 \
@@ -173,7 +200,7 @@ RUN apt-get update \
             || { echo "$package is below required version $floor" >&2; exit 1; }; \
        done \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
-    && rm -rf /tmp/glibc /var/lib/apt/lists/* \
+    && rm -rf /tmp/glibc /tmp/native /var/lib/apt/lists/* \
     && mkdir -p /usr/share/debconf \
     && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
     && chmod 0755 /usr/share/debconf/frontend \
@@ -185,6 +212,7 @@ RUN apt-get update \
 
 COPY --from=builder /install             /usr/local
 COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
+COPY verify-native-runtime.py /usr/local/share/gnosis/verify-native-runtime.py
 
 # Remove pip and its vendored vulnerable dependencies from the runtime.
 # CVE-2026-23949, CVE-2025-47273 (setuptools); CVE-2026-57585 (msgpack)
@@ -238,6 +266,7 @@ RUN ! command -v pip \
        done \
     && /bin/bash --noprofile --norc -c true \
     && python -c "import curses, readline; curses.setupterm(term='xterm')" \
+    && python /usr/local/share/gnosis/verify-native-runtime.py \
     && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
     && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
     && python -c "import sqlite3, sqlite_vec; assert sqlite3.sqlite_version == '${SQLITE_VERSION}'; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute(\"insert into docs values ('security fixed')\"); assert db.execute(\"select count(*) from docs where docs match 'fixed'\").fetchone()[0] == 1; db.enable_load_extension(True); db.load_extension(sqlite_vec.loadable_path()); db.execute('create virtual table vectors using vec0(embedding float[2])')" \
