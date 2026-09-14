@@ -103,9 +103,9 @@ on:
         required: false
         default: false
         type: boolean
-      # Derive the next revision from the number of tags already published for
-      # this exact upstream version. Failed builds publish no tag and therefore
-      # do not consume a revision.
+      # Derive the next revision from the highest published numeric tag for this
+      # exact upstream version. Failed builds publish no tag and therefore do
+      # not consume a revision.
       revision_from_published_tag_count:
         required: false
         default: false
@@ -293,14 +293,25 @@ jobs:
             url=$(jq -r '.next // empty' <<<"$response")
           done
           published_count=$(sort -u "$tags_file" | grep -c . || true)
-          next_revision=$((published_count + 1))
+          max_revision=$(awk -v prefix="${version}-v" '
+            index($0, prefix) == 1 {
+              revision = substr($0, length(prefix) + 1)
+              if (revision ~ /^[0-9]+$/ && revision + 0 > max) {
+                max = revision + 0
+              }
+            }
+            END {
+              print max + 0
+            }
+          ' "$tags_file")
+          next_revision=$((max_revision + 1))
           candidate="${version}-v${next_revision}"
           if grep -Fxq "$candidate" "$tags_file"; then
             echo "::error::Computed tag $candidate already exists; refusing to overwrite an immutable image"
             exit 1
           fi
           sed -E -i "s/^revision:[[:space:]]*[0-9]+[[:space:]]*$/revision: $next_revision/" "$CONFIG"
-          echo "Building $candidate after $published_count successful publication(s) for upstream $version"
+          echo "Building $candidate after $published_count successful publication(s); highest existing revision is v$max_revision for upstream $version"
 
       - name: Read image metadata
         id: meta

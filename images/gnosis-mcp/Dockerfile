@@ -6,9 +6,9 @@
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
-# Security: Python 3.13 on Debian Trixie plus a coherently rebuilt glibc pair
-# carrying the upstream fixes for CVE-2026-5435, CVE-2026-5928, and
-# CVE-2026-5450. PAM and build utilities are removed from the final image
+# Security: Python 3.13 on Debian Trixie plus a coherently rebuilt glibc pair.
+# Debian deb13u4 supplies CVE-2026-5928. Local patches retain the other
+# required glibc fixes. PAM and build utilities are removed from the final image
 # because this is a non-login service. SQLite is replaced with a
 # checksum-pinned upstream build that retains required FTS5 and extension
 # functionality.
@@ -20,8 +20,8 @@ ARG PYTHON_VERSION=3.13
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
 ARG DEBIAN_SUITE=trixie
-ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u3
-ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u3+rcamarda1
+ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u4
+ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u4+rcamarda1
 
 FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
 ARG DEBIAN_SUITE
@@ -36,16 +36,47 @@ RUN set -eux; \
     mkdir -p /build /out; cd /build; \
     apt-get source "glibc=${GLIBC_DEBIAN_VERSION}"; \
     cd "glibc-${GLIBC_DEBIAN_VERSION%%-*}"; \
-    for patch in /tmp/glibc-patches/*.patch; do git apply --check "$patch"; git apply "$patch"; done; \
+    for patch in /tmp/glibc-patches/*.patch; do \
+      if git apply --check "$patch"; then \
+        git apply "$patch"; \
+      elif git apply --reverse --check "$patch"; then \
+        echo "Patch already present in Debian source: $patch"; \
+      else \
+        echo "Patch is neither applicable nor already present: $patch" >&2; \
+        exit 1; \
+      fi; \
+    done; \
     DEBFULLNAME="rcamarda390 image build" DEBEMAIL="rcamarda390@users.noreply.github.com" \
       dch --force-distribution --distribution "${DEBIAN_SUITE}" --newversion "${GLIBC_BACKPORT_VERSION}" \
-      "Backport upstream fixes for CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928."; \
+      "Rebuild from Debian deb13u4; retain local backports for CVE-2026-5435 and CVE-2026-5450."; \
     DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -B -uc -us -j"$(nproc)"; \
     cp ../libc6_*_*.deb ../libc-bin_*_*.deb /out/; \
     dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
     dpkg-deb -f /out/libc-bin_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"
 
-FROM python:${PYTHON_VERSION}-slim AS builder
+# Xray v12: libacl1 2.3.2-2+b1 (CVE-2026-54369), libattr1 1:2.5.2-3
+# (CVE-2026-54371), ncurses-bin 6.5+20250216-2 (CVE-2025-69720), and
+# util-linux family 2.41.5-0+deb13u1 (CVE-2026-76642/78408/78409/78410).
+# See SECURITY-v12.md for fixed releases, source evidence and residual findings.
+# Rebuild Debian packages on Trixie; do not import sid runtime binaries.
+FROM debian:${DEBIAN_SUITE}-slim AS native_patched
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git dpkg-dev build-essential
+WORKDIR /build
+COPY prepare-native-sources.sh /tmp/prepare-native-sources.sh
+RUN sh /tmp/prepare-native-sources.sh \
+    && mkdir /out \
+    && for package in attr acl ncurses util-linux; do \
+        apt-get build-dep -y --no-install-recommends "./$package" || exit 1; \
+        if [ "$package" = acl ]; then \
+          (cd "$package" && DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+        else \
+          (cd "$package" && dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+        fi; \
+       done \
+    && cp ./*.deb /out/
+
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -121,12 +152,13 @@ RUN set -e; \
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
 
 ARG SQLITE_VERSION=3.53.4
 ARG GLIBC_BACKPORT_VERSION
 COPY --from=builder /opt/sqlite/lib/libsqlite3.so* /usr/local/lib/
 COPY --from=glibc_patched /out/ /tmp/glibc/
+COPY --from=native_patched /out/ /tmp/native/
 
 # Xray's fixed floor for CVE-2026-63072, CVE-2026-54874,
 # CVE-2026-18798, CVE-2026-63076, CVE-2026-63075, CVE-2026-14457,
@@ -134,23 +166,45 @@ COPY --from=glibc_patched /out/ /tmp/glibc/
 # Keep this as a minimum rather than an exact pin so later Debian security
 # revisions remain eligible. The build fails closed if the mirror is stale.
 ARG OPENSSL_MIN_VERSION=3.5.7-1~deb13u2
+ARG LIBPCRE2_MIN_VERSION=10.46-1~deb13u2
+ARG GZIP_MIN_VERSION=1.13-1+deb13u1
 
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends /tmp/glibc/libc6_*_*.deb /tmp/glibc/libc-bin_*_*.deb \
+    && set -- \
+    && for archive in /tmp/native/*.deb; do \
+        package="$(dpkg-deb -f "$archive" Package)"; \
+        state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
+        if [ "$state" = installed ]; then set -- "$@" "$archive"; fi; \
+       done \
+    && test "$#" -gt 0 \
+    && apt-get install -y --no-install-recommends "$@" \
     && apt-get install -y --no-install-recommends \
         libgomp1 \
         libssl3t64 \
         openssl \
         openssl-provider-legacy \
+        libpcre2-8-0 \
+        gzip \
     && for package in libssl3t64 openssl openssl-provider-legacy; do \
         installed_version="$(dpkg-query -W -f='${Version}' "$package")"; \
         echo "$package=$installed_version"; \
         dpkg --compare-versions "$installed_version" ge "$OPENSSL_MIN_VERSION" \
             || { echo "$package is below required version $OPENSSL_MIN_VERSION" >&2; exit 1; }; \
        done \
+    && for package_and_floor in \
+        "libpcre2-8-0:$LIBPCRE2_MIN_VERSION" \
+        "gzip:$GZIP_MIN_VERSION"; do \
+        package="${package_and_floor%%:*}"; \
+        floor="${package_and_floor#*:}"; \
+        installed_version="$(dpkg-query -W -f='${Version}' "$package")"; \
+        echo "$package=$installed_version"; \
+        dpkg --compare-versions "$installed_version" ge "$floor" \
+            || { echo "$package is below required version $floor" >&2; exit 1; }; \
+       done \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
-    && rm -rf /tmp/glibc /var/lib/apt/lists/* \
+    && rm -rf /tmp/glibc /tmp/native /var/lib/apt/lists/* \
     && mkdir -p /usr/share/debconf \
     && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
     && chmod 0755 /usr/share/debconf/frontend \
@@ -162,6 +216,7 @@ RUN apt-get update \
 
 COPY --from=builder /install             /usr/local
 COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
+COPY verify-native-runtime.py /usr/local/share/gnosis/verify-native-runtime.py
 
 # Remove pip and its vendored vulnerable dependencies from the runtime.
 # CVE-2026-23949, CVE-2025-47273 (setuptools); CVE-2026-57585 (msgpack)
@@ -215,10 +270,11 @@ RUN ! command -v pip \
        done \
     && /bin/bash --noprofile --norc -c true \
     && python -c "import curses, readline; curses.setupterm(term='xterm')" \
+    && python /usr/local/share/gnosis/verify-native-runtime.py \
     && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
     && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
     && python -c "import sqlite3, sqlite_vec; assert sqlite3.sqlite_version == '${SQLITE_VERSION}'; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute(\"insert into docs values ('security fixed')\"); assert db.execute(\"select count(*) from docs where docs match 'fixed'\").fetchone()[0] == 1; db.enable_load_extension(True); db.load_extension(sqlite_vec.loadable_path()); db.execute('create virtual table vectors using vec0(embedding float[2])')" \
-    && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1')" \
+    && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1'); assert Version(version('PyJWT')) >= Version('2.14.0')" \
     && python -c "import gnosis_mcp; print('Verification: gnosis-mcp OK')"
 
 ARG GNOSIS_VERSION=0.14.1
