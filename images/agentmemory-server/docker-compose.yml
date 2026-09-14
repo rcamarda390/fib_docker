@@ -6,7 +6,7 @@ services:
     ports:
       - "3111:3111"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3111/agentmemory/livez || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3111/agentmemory/livez').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 6
