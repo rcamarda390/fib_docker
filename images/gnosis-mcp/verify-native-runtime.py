@@ -57,5 +57,13 @@ with tempfile.TemporaryDirectory() as directory:
     source.unlink()
     subprocess.run(["tar", "--acls", "--xattrs", "-xf", str(root / "test.tar"), "-C", directory], check=True)
     assert source.read_bytes() == payload
-subprocess.run(["infocmp", "xterm"], check=True, stdout=subprocess.DEVNULL)
+# Require packaged files, not a fallback entry from another terminfo directory.
+for terminal in ("xterm", "rxvt-unicode", "rxvt-unicode-256color"):
+    entry = Path("/usr/share/terminfo") / terminal[0] / terminal
+    assert entry.is_file() and entry.stat().st_size > 0, f"Missing terminfo: {entry}"
+    subprocess.run(
+        ["infocmp", "-A", "/usr/share/terminfo", terminal],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
 print("Native runtime verification passed")
