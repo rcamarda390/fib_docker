@@ -36,7 +36,16 @@ RUN set -eux; \
     mkdir -p /build /out; cd /build; \
     apt-get source "glibc=${GLIBC_DEBIAN_VERSION}"; \
     cd "glibc-${GLIBC_DEBIAN_VERSION%%-*}"; \
-    for patch in /tmp/glibc-patches/*.patch; do git apply --check "$patch"; git apply "$patch"; done; \
+    for patch in /tmp/glibc-patches/*.patch; do \
+      if git apply --check "$patch"; then \
+        git apply "$patch"; \
+      elif git apply --reverse --check "$patch"; then \
+        echo "Patch already present in Debian source: $patch"; \
+      else \
+        echo "Patch is neither applicable nor already present: $patch" >&2; \
+        exit 1; \
+      fi; \
+    done; \
     DEBFULLNAME="rcamarda390 image build" DEBEMAIL="rcamarda390@users.noreply.github.com" \
       dch --force-distribution --distribution "${DEBIAN_SUITE}" --newversion "${GLIBC_BACKPORT_VERSION}" \
       "Backport upstream fixes for CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928."; \
