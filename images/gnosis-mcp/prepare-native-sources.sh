@@ -56,6 +56,14 @@ done
 # Pass the staging directory explicitly; keep ncurses security flags intact.
 # Remove this adaptation when Debian's recipe supplies tic -o itself.
 rules=ncurses/debian/rules
-test "$(grep -Fc 'debian/tmp/usr/bin/tic -x debian/' "$rules")" -eq 1
-sed -i 's@debian/tmp/usr/bin/tic -x debian/@debian/tmp/usr/bin/tic -x -o "$(CURDIR)/debian/tmp/usr/share/terminfo" debian/@' "$rules"
-test "$(grep -Fc 'debian/tmp/usr/bin/tic -x -o "$(CURDIR)/debian/tmp/usr/share/terminfo" debian/' "$rules")" -eq 1
+# Match the literal recipe suffix, not Make's expanded debian/tmp prefix.
+if [ "$(grep -Fc '/usr/bin/tic -x debian/' "$rules")" -ne 1 ]; then
+    echo "Expected one staged tic command in $rules; recipe changed:" >&2
+    grep -n 'tic' "$rules" >&2 || true
+    exit 1
+fi
+sed -i 's@/usr/bin/tic -x debian/@/usr/bin/tic -x -o "$(CURDIR)/debian/tmp/usr/share/terminfo" debian/@' "$rules"
+if [ "$(grep -Fc '/usr/bin/tic -x -o "$(CURDIR)/debian/tmp/usr/share/terminfo" debian/' "$rules")" -ne 1 ]; then
+    echo "Failed to add explicit tic staging directory in $rules" >&2
+    exit 1
+fi
