@@ -150,9 +150,9 @@ RUN set -e; \
     find /gnosis-model-cache -type f -ls
 
 # ---------------------------------------------------------------------------
-# Stage 2 — runtime
+# Stage 2 — verified runtime root filesystem
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime_rootfs
 
 ARG SQLITE_VERSION=3.53.4
 ARG GLIBC_BACKPORT_VERSION
@@ -276,6 +276,33 @@ RUN ! command -v pip \
     && python -c "import sqlite3, sqlite_vec; assert sqlite3.sqlite_version == '${SQLITE_VERSION}'; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute(\"insert into docs values ('security fixed')\"); assert db.execute(\"select count(*) from docs where docs match 'fixed'\").fetchone()[0] == 1; db.enable_load_extension(True); db.load_extension(sqlite_vec.loadable_path()); db.execute('create virtual table vectors using vec0(embedding float[2])')" \
     && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1'); assert Version(version('PyJWT')) >= Version('2.14.0')" \
     && python -c "import gnosis_mcp; print('Verification: gnosis-mcp OK')"
+
+# The prior image report identifies packages from superseded Python/Debian base
+# layers even though this stage upgrades or replaces them and verifies the
+# final package state above. Publish one root filesystem layer instead, so Xray
+# inspects the same final state that runs in production. This does not hide a
+# package: /var/lib/dpkg and every installed file are copied intact.
+FROM scratch AS runtime
+COPY --from=runtime_rootfs / /
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    GNOSIS_MCP_HOST=0.0.0.0 \
+    GNOSIS_MCP_PORT=8000 \
+    GNOSIS_MCP_DATABASE_URL=sqlite:////data/docs.db \
+    GNOSIS_MCP_EMBED_PROVIDER=local \
+    GNOSIS_MCP_ACCESS_LOG=true \
+    GNOSIS_MCP_WRITABLE=false \
+    XDG_DATA_HOME=/gnosis-model-cache
+
+USER gnosis
+WORKDIR /home/gnosis
+
+EXPOSE 8000
+VOLUME ["/data"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % __import__('os').environ['GNOSIS_MCP_PORT'])" || exit 1
 
 ARG GNOSIS_VERSION=0.14.1
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
