@@ -7,7 +7,7 @@ ARG PYTHON_APK_VERSION=3.14.7-r1
 # uv.lock. These are promoted to explicit build inputs so the Docker build
 # fails closed if lock resolution ever drifts below the Xray-remediated set.
 ARG CRYPTOGRAPHY_VERSION=50.0.0
-ARG PYJWT_VERSION=2.13.0
+ARG PYJWT_VERSION=2.14.0
 ARG URLLIB3_VERSION=2.7.0
 ARG CLICK_VERSION=8.4.2
 ARG IDNA_VERSION=3.19
