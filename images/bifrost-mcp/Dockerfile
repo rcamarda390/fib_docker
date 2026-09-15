@@ -96,6 +96,7 @@ ARG GO_GRPC_VERSION
 RUN set -eu; \
     GOFLAGS=-mod=mod go get \
       "github.com/mark3labs/mcp-go@${GO_MCP_GO_VERSION}" \
+      "github.com/mark3labs/mcp-go/mcp@${GO_MCP_GO_VERSION}" \
       "golang.org/x/text@${GO_TEXT_VERSION}" \
       "golang.org/x/net@${GO_NET_VERSION}" \
       "github.com/go-git/go-git/v5@${GO_GIT_VERSION}" \
