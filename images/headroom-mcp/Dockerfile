@@ -481,3 +481,12 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
 USER headroom
 WORKDIR /home/headroom
 VOLUME ["/home/headroom/.headroom"]
+
+LABEL org.opencontainers.image.title="headroom-mcp" \
+      org.opencontainers.image.description="Headroom MCP server for context optimization" \
+      org.opencontainers.image.source="https://github.com/headroomlabs-ai/headroom" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${HEADROOM_VERSION}" \
+      org.opencontainers.image.revision="${HEADROOM_COMMIT}"
+
+ENTRYPOINT ["/usr/local/bin/headroom-entrypoint"]
