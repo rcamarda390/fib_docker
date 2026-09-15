@@ -187,9 +187,12 @@ COPY --chmod=0755 offline-embedding-smoke.mjs /opt/agentmemory/offline-embedding
 RUN --network=none node /opt/agentmemory/offline-embedding-smoke.mjs
 
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/agentmemory-entrypoint.sh
+COPY --chmod=0755 runtime-smoke.mjs /opt/agentmemory/runtime-smoke.mjs
+COPY --chmod=0755 strip-runtime-packages.sh /usr/local/lib/strip-runtime-packages.sh
 
-# Replace PCRE2 with the upstream fixed ABI, then remove scanner-visible
-# runtime packages whose affected functionality is absent from this service.
+# Replace PCRE2 with the upstream fixed ABI. Runtime package removal happens
+# in a copied root below so the intact build root remains available to prove
+# and perform the package-manager-stack removal transaction.
 # systemd-homed is not installed or used; libsystemd/libudev are source-package
 # siblings that Xray and Trivy still attribute to CVE-2026-16742. zlib1g stays:
 # OpenSSL dynamically requires libz.so.1 for runtime secret generation.
@@ -197,17 +200,6 @@ COPY --from=pcre2_patched /opt/pcre2/lib/ /usr/local/lib/
 COPY --from=pcre2_patched /opt/pcre2/bin/pcre2grep /usr/local/bin/pcre2grep
 RUN set -eux; \
     ldconfig; \
-    mkdir -p /usr/share/debconf; \
-    printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend; \
-    chmod 0755 /usr/share/debconf/frontend; \
-    dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-      gzip tar libsystemd0 libudev1 libpcre2-8-0; \
-    rm -rf /usr/share/debconf; \
-    ldconfig; \
-    for package in gzip tar libsystemd0 libudev1 libpcre2-8-0 perl-base curl; do \
-      state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
-      test "$state" != installed || { echo "$package is still installed" >&2; exit 1; }; \
-    done; \
     /usr/local/bin/pcre2grep -V | grep -F "pcre2grep version 10.48"; \
     for binary in /bin/sh /usr/bin/openssl /usr/bin/tini /usr/sbin/gosu \
                   /usr/local/bin/node /usr/local/bin/iii /usr/bin/chown \
@@ -219,16 +211,21 @@ RUN set -eux; \
     gosu node:node node -e "require('node:zlib').gzipSync('runtime dependency check'); console.log('node runtime OK')"; \
     node --input-type=module -e "await import('iii-sdk'); console.log('iii-sdk runtime OK')"
 
-# Xray reports packages from superseded base/build layers even after a later
-# upgrade or purge. Export the verified root filesystem as one final layer so
-# scanners inspect the same package state that runs in production. dpkg
-# metadata is retained; this does not hide installed packages.
-# Re-run the offline embedding path after package removal so the final runtime,
-# not merely the pre-cleanup root filesystem, proves its native dependency closure.
-RUN --network=none node /opt/agentmemory/offline-embedding-smoke.mjs
+# Build a disposable runtime root, remove the whole package-manager stack
+# rather than breaking dpkg by force-removing tar alone, and validate that root
+# before it becomes the final image. The source root remains a reversible build
+# environment; only /runtime-root is copied into the scratch stage.
+RUN set -eux; \
+    mkdir /runtime-root; \
+    for path in bin etc home lib lib64 opt sbin usr var; do \
+      if [ -e "/$path" ]; then cp -a "/$path" /runtime-root/; fi; \
+    done; \
+    install -d -m 0755 /runtime-root/data /runtime-root/run; \
+    install -d -m 1777 /runtime-root/tmp; \
+    /usr/local/lib/strip-runtime-packages.sh /runtime-root
 
 FROM scratch AS runtime
-COPY --from=runtime_rootfs / /
+COPY --from=runtime_rootfs /runtime-root/ /
 
 ARG AGENTMEMORY_VERSION=0.9.29
 ARG AGENTMEMORY_IMAGE_VERSION=v1

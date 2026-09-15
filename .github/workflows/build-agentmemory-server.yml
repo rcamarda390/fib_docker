@@ -35,7 +35,9 @@ jobs:
       # Target the x86_64 RHEL EC2 deployment; avoid publishing a multi-arch manifest list.
       platforms: linux/amd64
       run_smoke_test: true
-      smoke_command: --offline-embedding-test
+      # Exercises the offline model, server startup, health, and the REST paths
+      # used by the MCP memory_save and memory_recall tools.
+      smoke_command: --runtime-smoke-test
       smoke_network_disabled: true
       smoke_timeout: 120
       smoke_healthcheck: true
