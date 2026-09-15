@@ -299,7 +299,7 @@ HFCACHE
 EOF
 
 
-FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime_rootfs
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
 ARG LITELLM_VERSION
@@ -477,6 +477,30 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && ! command -v openssl \
  && ! command -v pip \
  && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
+
+
+# Xray reports packages/files from superseded base-image layers even after the
+# runtime stage upgrades or removes them. Copy the fully verified effective
+# root filesystem into a fresh final stage so scanners see exactly what runs.
+# This retains all final files and dpkg records; it does not suppress findings.
+FROM scratch AS runtime
+COPY --from=runtime_rootfs / /
+
+ARG HEADROOM_VERSION
+ARG HEADROOM_COMMIT
+
+ENV HEADROOM_HOST=0.0.0.0 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH=/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    HF_HOME=/opt/headroom-cache/huggingface \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    LITELLM_LOCAL_MODEL_COST_MAP=True \
+    HEADROOM_UPDATE_CHECK=off \
+    HEADROOM_SKIP_UPSTREAM_CHECK=1 \
+    HEADROOM_OUTPUT_SHAPER=1
 
 USER headroom
 WORKDIR /home/headroom
