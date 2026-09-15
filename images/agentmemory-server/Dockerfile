@@ -222,51 +222,10 @@ RUN set -eux; \
 # upgrade or purge. Export the verified root filesystem as one final layer so
 # scanners inspect the same package state that runs in production. dpkg
 # metadata is retained; this does not hide installed packages.
-FROM scratch AS runtime
-COPY --from=runtime_rootfs / /
+# Re-run the offline embedding path after package removal so the final runtime,
+# not merely the pre-cleanup root filesystem, proves its native dependency closure.
+RUN --network=none node /opt/agentmemory/offline-embedding-smoke.mjs
 
-ARG AGENTMEMORY_VERSION=0.9.29
-ARG AGENTMEMORY_IMAGE_VERSION=v1
-ARG III_VERSION=0.11.2
-ARG TRANSFORMERS_VERSION=4.2.0
-ARG TRANSFORMERS_MODEL_REVISION=751bff37182d3f1213fa05d7196b954e230abad9
-ARG TRANSFORMERS_MODEL_ID=Xenova/all-MiniLM-L6-v2
-
-LABEL org.opencontainers.image.title="agentmemory" \
-      org.opencontainers.image.version="${AGENTMEMORY_VERSION}-${AGENTMEMORY_IMAGE_VERSION}" \
-      org.opencontainers.image.description="Combined AgentMemory and iii runtime with offline local embeddings" \
-      agentmemory.version="${AGENTMEMORY_VERSION}" \
-      agentmemory.iii-version="${III_VERSION}" \
-      agentmemory.embedding-provider="local" \
-      agentmemory.embedding-model="${TRANSFORMERS_MODEL_ID}" \
-      agentmemory.embedding-dimensions="384" \
-      agentmemory.transformers-version="${TRANSFORMERS_VERSION}" \
-      agentmemory.model-revision="${TRANSFORMERS_MODEL_REVISION}"
-
-ENV AGENTMEMORY_III_VERSION=${III_VERSION} \
-    EMBEDDING_PROVIDER=local \
-    AGENTMEMORY_AUTO_COMPRESS=false \
-    AGENTMEMORY_INJECT_CONTEXT=false \
-    GRAPH_EXTRACTION_ENABLED=false \
-    CONSOLIDATION_ENABLED=false \
-    TRANSFORMERS_MODEL_PATH=/opt/agentmemory/models \
-    TRANSFORMERS_CACHE_DIR=/opt/agentmemory/transformers-cache \
-    TRANSFORMERS_OFFLINE=1 \
-    HF_HUB_OFFLINE=1 \
-    NODE_OPTIONS=--import=/opt/agentmemory/transformers-offline.mjs \
-    TINI_SUBREAPER=1
-
-WORKDIR /opt/agentmemory
-EXPOSE 3111
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agentmemory-entrypoint.sh"]
-; \
-    gosu node:node node -e "require('node:zlib').gzipSync('runtime dependency check'); console.log('node runtime OK')"; \
-    node --input-type=module -e "await import('iii-sdk'); console.log('iii-sdk runtime OK')"
-
-# Xray reports packages from superseded base/build layers even after a later
-# upgrade or purge. Export the verified root filesystem as one final layer so
-# scanners inspect the same package state that runs in production. dpkg
-# metadata is retained; this does not hide installed packages.
 FROM scratch AS runtime
 COPY --from=runtime_rootfs / /
 
