@@ -207,7 +207,7 @@ RUN set -eux; \
       state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
       test "$state" != installed || { echo "$package is still installed" >&2; exit 1; }; \
     done; \
-    test "$(/usr/local/bin/pcre2grep -V | awk '{print $NF}')" = "10.48"; \
+    /usr/local/bin/pcre2grep -V | grep -F "pcre2grep version 10.48"; \
     for binary in /bin/sh /usr/bin/openssl /usr/bin/tini /usr/sbin/gosu \
                   /usr/local/bin/node /usr/local/bin/iii /usr/bin/chown \
                   /usr/bin/chmod /usr/bin/mkdir; do \
