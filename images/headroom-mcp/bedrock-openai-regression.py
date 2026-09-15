@@ -15,6 +15,9 @@ def backend(provider: str):
     b.provider = provider
     b.region = "us-gov-west-1" if provider == "bedrock" else None
     b.profile_name = None
+    # PR 3565 owns prompt-cache rollout behavior; this build test exercises
+    # only the unrelated downstream compatibility carry.
+    b._openai_prompt_caching = False
     b.map_model_id = lambda model: f"{provider}/{model}"
     return b
 
@@ -58,14 +61,6 @@ async def capture_stream(provider: str, body: dict, *, cache_supported: bool = T
     return captured
 
 
-def assert_system_cached(messages):
-    system = next(m for m in messages if m.get("role") == "system")
-    assert system.get("cache_control") == {"type": "ephemeral"}
-    for message in messages:
-        if message.get("role") in {"user", "assistant"}:
-            assert "cache_control" not in message
-
-
 async def main():
     body = {
         "model": "us-gov.anthropic.claude-sonnet-5",
@@ -87,18 +82,16 @@ async def main():
         "max_completion_tokens": 20,
     }
 
-    # Supported Bedrock models: both OpenAI paths strip the unsafe passthrough
-    # field and mark only the stable system prefix using native cache_control.
+    # Both OpenAI paths retain only the unrelated compatibility carry here.
     for capture in (capture_nonstream, capture_stream):
         got = await capture("bedrock", body, cache_supported=True)
         assert "parallel_tool_calls" not in got.get("extra_body", {})
         assert got["max_completion_tokens"] == 20
         assert "max_completion_tokens" not in got.get("extra_body", {})
         assert "cache_control_injection_points" not in got
-        assert_system_cached(got["messages"])
+        assert not any("cache_control" in m for m in got["messages"])
 
-    # Unsupported Bedrock models: no cache marker is added. This is the required
-    # graceful-off behavior for models without prompt-caching support.
+    # No custom cache marker is added by this downstream patch.
     got = await capture_nonstream("bedrock", body, cache_supported=False)
     assert "cache_control_injection_points" not in got
     assert not any("cache_control" in m for m in got["messages"])
@@ -110,14 +103,13 @@ async def main():
     assert "cache_control_injection_points" not in got
     assert not any("cache_control" in m for m in got["messages"])
 
-    # No system prompt means there is no stable prefix for this patch to mark.
+    # No system prompt remains unchanged.
     dynamic_only = dict(body)
     dynamic_only["messages"] = [{"role": "user", "content": "changes"}]
     got = await capture_nonstream("bedrock", dynamic_only, cache_supported=True)
     assert not any("cache_control" in m for m in got["messages"])
 
-    # List-form system content must preserve block structure and put the marker
-    # on the last block, matching LiteLLM's native Bedrock transformation.
+    # List-form system content remains unchanged by this downstream patch.
     block_system = dict(body)
     block_system["messages"] = [
         {
@@ -131,8 +123,7 @@ async def main():
     ]
     got = await capture_nonstream("bedrock", block_system, cache_supported=True)
     system = got["messages"][0]
-    assert system["content"][-1]["cache_control"] == {"type": "ephemeral"}
-    assert "cache_control" not in system["content"][0]
+    assert all("cache_control" not in block for block in system["content"])
 
     print("Bedrock OpenAI regression tests: PASS")
 

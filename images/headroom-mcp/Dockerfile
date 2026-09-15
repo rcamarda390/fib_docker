@@ -2,6 +2,8 @@
 
 ARG HEADROOM_VERSION=0.37.0
 ARG HEADROOM_COMMIT=32d7ca4577d599b8a5f811ada74cf31504302c9d
+ARG HEADROOM_REPOSITORY=https://github.com/headroomlabs-ai/headroom.git
+ARG HEADROOM_REF=v0.37.0
 ARG PYTHON_VERSION=3.13.15
 ARG PYTHON_ABI=3.13
 ARG DEBIAN_SUITE=trixie
@@ -50,9 +52,11 @@ RUN set -eux; \
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS source
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
+ARG HEADROOM_REPOSITORY
+ARG HEADROOM_REF
 RUN apk add --no-cache ca-certificates git \
-    && git clone --depth 1 --branch "v${HEADROOM_VERSION}" \
-       https://github.com/headroomlabs-ai/headroom.git /src \
+    && git clone --depth 1 --branch "${HEADROOM_REF}" \
+       "${HEADROOM_REPOSITORY}" /src \
     && test "$(git -C /src rev-parse HEAD)" = "$HEADROOM_COMMIT"
 
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder

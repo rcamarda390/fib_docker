@@ -2,7 +2,9 @@ name: headroom-mcp
 upstream_version: 0.37.0
 revision: 6
 build_args:
-  HEADROOM_COMMIT: 32d7ca4577d599b8a5f811ada74cf31504302c9d
+  HEADROOM_COMMIT: fedcb507adbe38520acd84a3d48b57caca87e41e
+  HEADROOM_REPOSITORY: https://github.com/Ayushraj06-bit/headroom.git
+  HEADROOM_REF: feat/bedrock-openai-prompt-caching-3554
   GLIBC_DEBIAN_VERSION: 2.41-12+deb13u3
   GLIBC_BACKPORT_VERSION: 2.41-12+deb13u3+rcamarda1
   LITELLM_VERSION: 1.96.2
