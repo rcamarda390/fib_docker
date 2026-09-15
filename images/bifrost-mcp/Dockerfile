@@ -1,15 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
-ARG BIFROST_VERSION=2.0.0
-ARG BIFROST_COMMIT=e4a30d6041c0446603aea615bc5da340dac001b1
+ARG BIFROST_VERSION=2.1.1
+ARG BIFROST_COMMIT=c193745d2a713e9f58f021d43e138df5eb7e038a
 
-# Go toolchain the gateway binary is compiled with. Bifrost v2.0.0 declares
+# Go toolchain the gateway binary is compiled with. Bifrost v2.1.1 declares
 # go 1.27.0 in transports/go.mod and upstream builds with this exact toolchain.
 # Xray also reads the compiler version from the binary's build info, so keep
 # the toolchain pinned and verified as part of the image supply chain.
 ARG GO_VERSION=1.27.0
 
-# Module versions that clear the Xray findings against upstream v2.0.0's
+# Module versions that clear the Xray findings against upstream v2.1.1's
 # transports/go.mod:
 #   x/text v0.37.0            CVE-2026-56852 (7.5), fixed in v0.39.0; v0.41.0
 #                             is required by x/net v0.58.0 and gRPC v1.83.2
