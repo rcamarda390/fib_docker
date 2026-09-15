@@ -14,8 +14,8 @@ ARG GO_VERSION=1.27.0
 #   x/text v0.37.0            CVE-2026-56852 (7.5), fixed in v0.39.0; v0.40.0
 #                             is the version go-openapi/validate v0.26.1
 #                             itself requires, so MVS lands there
-#   x/net v0.55.0             CVE-2026-46600 (7.5), fixed in v0.56.0; v0.57.0
-#                             is required by validate v0.26.1 the same way
+#   x/net v0.55.0             CVE-2026-46600 (7.5), fixed in v0.56.0; v0.58.0
+#                             is required by gRPC v1.83.2
 #   go-git/v5 v5.19.1         CVE-2026-71556 (7.1), CVE-2026-71557 (6.3),
 #                             fixed in v5.19.2
 #   go-openapi/spec v0.22.3   XRAY-1032958/1032961/1032962, fixed in v0.22.7,
@@ -35,7 +35,7 @@ ARG GO_VERSION=1.27.0
 #                             errors v0.22.8).
 # Drop a pin once upstream's own go.mod requires that version or newer.
 ARG GO_TEXT_VERSION=v0.40.0
-ARG GO_NET_VERSION=v0.57.0
+ARG GO_NET_VERSION=v0.58.0
 ARG GO_GIT_VERSION=v5.19.2
 ARG GO_OPENAPI_SPEC_VERSION=v0.22.9
 ARG GO_OPENAPI_SWAG_VERSION=v0.27.3
