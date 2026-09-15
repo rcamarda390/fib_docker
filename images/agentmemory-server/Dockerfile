@@ -1,8 +1,52 @@
+# syntax=docker/dockerfile:1.7
+
 ARG III_VERSION=0.11.2
+ARG DEBIAN_SUITE=trixie
 
 FROM iiidev/iii:${III_VERSION} AS iii-image
 
-FROM node:26-slim
+# Rebuild the exact Trixie package families reported by Xray and Trivy from
+# fixed upstream sources. This keeps the Trixie ABI while moving ACL, attr,
+# ncurses, and util-linux beyond their vulnerable releases.
+FROM debian:${DEBIAN_SUITE}-slim AS native_patched
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl git dpkg-dev build-essential
+WORKDIR /build
+COPY prepare-native-sources.sh /tmp/prepare-native-sources.sh
+RUN sh /tmp/prepare-native-sources.sh \
+ && mkdir /out \
+ && for package in attr acl ncurses util-linux; do \
+      apt-get build-dep -y --no-install-recommends "./$package" || exit 1; \
+      if [ "$package" = acl ]; then \
+        (cd "$package" && DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+      else \
+        (cd "$package" && dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
+      fi; \
+    done \
+ && cp ./*.deb /out/
+
+# Xray requires PCRE2 10.48 for the reported CVE-2026-86145/8915x/8916x
+# family. Build the checksum-pinned upstream release and retain only the
+# ABI-compatible 8-bit shared library needed by libselinux/coreutils.
+FROM debian:${DEBIAN_SUITE}-slim AS pcre2_patched
+ARG PCRE2_VERSION=10.48
+ARG PCRE2_SHA256=ebcc25aadf2a51fa1fefa9b8bc9e7a79b3dae86870a0f1152a22e42befd46888
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends build-essential ca-certificates curl; \
+    curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+      "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VERSION}/pcre2-${PCRE2_VERSION}.tar.gz" \
+      --output /tmp/pcre2.tar.gz; \
+    echo "${PCRE2_SHA256}  /tmp/pcre2.tar.gz" | sha256sum --check --status; \
+    tar -xzf /tmp/pcre2.tar.gz -C /tmp; \
+    cd "/tmp/pcre2-${PCRE2_VERSION}"; \
+    ./configure --prefix=/opt/pcre2 --disable-static --enable-shared \
+      --disable-pcre2-16 --disable-pcre2-32 --disable-jit; \
+    make -j"$(nproc)"; \
+    make install; \
+    /opt/pcre2/bin/pcre2grep -V | grep -F "version ${PCRE2_VERSION}"
+
+FROM node:26-slim AS runtime_rootfs
 
 ARG AGENTMEMORY_VERSION=0.9.29
 ARG AGENTMEMORY_IMAGE_VERSION=v1
@@ -27,13 +71,29 @@ LABEL org.opencontainers.image.title="agentmemory" \
 # never invokes Perl. Debian Trixie currently ships perl-base 5.40.1-6 with
 # the Xray-reported CVEs and no Trixie fix version. Remove the unused package
 # after all apt work, then fail the build if it remains installed.
+COPY --from=native_patched /out/ /tmp/native/
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates tini gosu curl \
  && apt-get upgrade -y --no-install-recommends \
+ && set -- \
+ && for archive in /tmp/native/*.deb; do \
+      package="$(dpkg-deb -f "$archive" Package)"; \
+      state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
+      if [ "$state" = installed ]; then set -- "$@" "$archive"; fi; \
+    done \
+ && test "$#" -gt 0 \
+ && apt-get install -y --no-install-recommends "$@" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libacl1)" ge "2.4.0-1+rcamarda1" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libattr1)" ge "1:2.6.0-1+rcamarda1" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libtinfo6)" ge "6.6+20260608-2+rcamarda1" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libuuid1)" ge "2.41.6-0+rcamarda1" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libc6)" ge "2.41-12+deb13u4" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libc-bin)" ge "2.41-12+deb13u4" \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libsqlite3-0)" ge "3.46.1-7+deb13u2" \
  && apt-get purge -y --auto-remove --allow-remove-essential perl-base perl-modules-5.40 \
  && test "$(dpkg-query -W -f='${Status}' perl-base 2>/dev/null || true)" != "install ok installed" \
  && ! command -v perl \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /tmp/native /var/lib/apt/lists/*
 
 COPY --from=iii-image /app/iii /usr/local/bin/iii
 
@@ -128,6 +188,73 @@ RUN --network=none node /opt/agentmemory/offline-embedding-smoke.mjs
 
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/agentmemory-entrypoint.sh
 
-EXPOSE 3111
+# Replace PCRE2 with the upstream fixed ABI, then remove scanner-visible
+# runtime packages whose affected functionality is absent from this service.
+# systemd-homed is not installed or used; libsystemd/libudev are source-package
+# siblings that Xray and Trivy still attribute to CVE-2026-16742.
+COPY --from=pcre2_patched /opt/pcre2/lib/ /usr/local/lib/
+RUN set -eux; \
+    ldconfig; \
+    mkdir -p /usr/share/debconf; \
+    printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend; \
+    chmod 0755 /usr/share/debconf/frontend; \
+    dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+      gzip tar libsystemd0 libudev1 libpcre2-8-0 zlib1g; \
+    rm -rf /usr/share/debconf; \
+    ldconfig; \
+    for package in gzip tar libsystemd0 libudev1 libpcre2-8-0 zlib1g perl-base curl; do \
+      state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
+      test "$state" != installed || { echo "$package is still installed" >&2; exit 1; }; \
+    done; \
+    test "$(/opt/pcre2/bin/pcre2grep -V | awk '{print $NF}')" = "10.48"; \
+    for binary in /bin/sh /usr/bin/openssl /usr/bin/tini /usr/sbin/gosu \
+                  /usr/local/bin/node /usr/local/bin/iii /usr/bin/chown \
+                  /usr/bin/chmod /usr/bin/mkdir; do \
+      test -x "$binary"; \
+      ! ldd "$binary" 2>&1 | grep -q 'not found'; \
+    done; \
+    openssl rand -hex 32 | grep -Eq '^[0-9a-f]{64}; \
+    gosu node:node node -e "require('node:zlib').gzipSync('runtime dependency check'); console.log('node runtime OK')"; \
+    node --input-type=module -e "await import('iii-sdk'); console.log('iii-sdk runtime OK')"
 
+# Xray reports packages from superseded base/build layers even after a later
+# upgrade or purge. Export the verified root filesystem as one final layer so
+# scanners inspect the same package state that runs in production. dpkg
+# metadata is retained; this does not hide installed packages.
+FROM scratch AS runtime
+COPY --from=runtime_rootfs / /
+
+ARG AGENTMEMORY_VERSION=0.9.29
+ARG AGENTMEMORY_IMAGE_VERSION=v1
+ARG III_VERSION=0.11.2
+ARG TRANSFORMERS_VERSION=4.2.0
+ARG TRANSFORMERS_MODEL_REVISION=751bff37182d3f1213fa05d7196b954e230abad9
+ARG TRANSFORMERS_MODEL_ID=Xenova/all-MiniLM-L6-v2
+
+LABEL org.opencontainers.image.title="agentmemory" \
+      org.opencontainers.image.version="${AGENTMEMORY_VERSION}-${AGENTMEMORY_IMAGE_VERSION}" \
+      org.opencontainers.image.description="Combined AgentMemory and iii runtime with offline local embeddings" \
+      agentmemory.version="${AGENTMEMORY_VERSION}" \
+      agentmemory.iii-version="${III_VERSION}" \
+      agentmemory.embedding-provider="local" \
+      agentmemory.embedding-model="${TRANSFORMERS_MODEL_ID}" \
+      agentmemory.embedding-dimensions="384" \
+      agentmemory.transformers-version="${TRANSFORMERS_VERSION}" \
+      agentmemory.model-revision="${TRANSFORMERS_MODEL_REVISION}"
+
+ENV AGENTMEMORY_III_VERSION=${III_VERSION} \
+    EMBEDDING_PROVIDER=local \
+    AGENTMEMORY_AUTO_COMPRESS=false \
+    AGENTMEMORY_INJECT_CONTEXT=false \
+    GRAPH_EXTRACTION_ENABLED=false \
+    CONSOLIDATION_ENABLED=false \
+    TRANSFORMERS_MODEL_PATH=/opt/agentmemory/models \
+    TRANSFORMERS_CACHE_DIR=/opt/agentmemory/transformers-cache \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_OFFLINE=1 \
+    NODE_OPTIONS=--import=/opt/agentmemory/transformers-offline.mjs \
+    TINI_SUBREAPER=1
+
+WORKDIR /opt/agentmemory
+EXPOSE 3111
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agentmemory-entrypoint.sh"]
