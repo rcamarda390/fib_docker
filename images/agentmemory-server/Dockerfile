@@ -214,7 +214,7 @@ RUN set -eux; \
       test -x "$binary"; \
       ! ldd "$binary" 2>&1 | grep -q 'not found'; \
     done; \
-    openssl rand -hex 32 | grep -Eq '^[0-9a-f]{64}
+    openssl rand -hex 32 | grep -Eq '^[0-9a-f]{64}$'; \
     gosu node:node node -e "require('node:zlib').gzipSync('runtime dependency check'); console.log('node runtime OK')"; \
     node --input-type=module -e "await import('iii-sdk'); console.log('iii-sdk runtime OK')"
 
