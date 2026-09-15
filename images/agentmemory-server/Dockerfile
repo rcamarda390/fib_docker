@@ -193,6 +193,7 @@ COPY --chmod=0755 entrypoint.sh /usr/local/bin/agentmemory-entrypoint.sh
 # systemd-homed is not installed or used; libsystemd/libudev are source-package
 # siblings that Xray and Trivy still attribute to CVE-2026-16742.
 COPY --from=pcre2_patched /opt/pcre2/lib/ /usr/local/lib/
+COPY --from=pcre2_patched /opt/pcre2/bin/pcre2grep /usr/local/bin/pcre2grep
 RUN set -eux; \
     ldconfig; \
     mkdir -p /usr/share/debconf; \
