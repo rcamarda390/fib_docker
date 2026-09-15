@@ -191,7 +191,8 @@ COPY --chmod=0755 entrypoint.sh /usr/local/bin/agentmemory-entrypoint.sh
 # Replace PCRE2 with the upstream fixed ABI, then remove scanner-visible
 # runtime packages whose affected functionality is absent from this service.
 # systemd-homed is not installed or used; libsystemd/libudev are source-package
-# siblings that Xray and Trivy still attribute to CVE-2026-16742.
+# siblings that Xray and Trivy still attribute to CVE-2026-16742. zlib1g stays:
+# OpenSSL dynamically requires libz.so.1 for runtime secret generation.
 COPY --from=pcre2_patched /opt/pcre2/lib/ /usr/local/lib/
 COPY --from=pcre2_patched /opt/pcre2/bin/pcre2grep /usr/local/bin/pcre2grep
 RUN set -eux; \
@@ -200,10 +201,10 @@ RUN set -eux; \
     printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend; \
     chmod 0755 /usr/share/debconf/frontend; \
     dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-      gzip tar libsystemd0 libudev1 libpcre2-8-0 zlib1g; \
+      gzip tar libsystemd0 libudev1 libpcre2-8-0; \
     rm -rf /usr/share/debconf; \
     ldconfig; \
-    for package in gzip tar libsystemd0 libudev1 libpcre2-8-0 zlib1g perl-base curl; do \
+    for package in gzip tar libsystemd0 libudev1 libpcre2-8-0 perl-base curl; do \
       state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
       test "$state" != installed || { echo "$package is still installed" >&2; exit 1; }; \
     done; \
