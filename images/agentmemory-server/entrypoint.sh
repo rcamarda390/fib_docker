@@ -25,6 +25,11 @@ if [ "${1:-}" = "--offline-embedding-test" ]; then
   exec gosu "$RUN_AS" node /opt/agentmemory/offline-embedding-smoke.mjs "$@"
 fi
 
+if [ "${1:-}" = "--runtime-smoke-test" ]; then
+  shift
+  exec node /opt/agentmemory/runtime-smoke.mjs "$@"
+fi
+
 mkdir -p "$DATA_DIR"
 chown -R "$RUN_AS" "$DATA_DIR"
 
