@@ -40,9 +40,12 @@ ARG GO_GIT_VERSION=v5.19.2
 ARG GO_OPENAPI_SPEC_VERSION=v0.22.9
 ARG GO_OPENAPI_SWAG_VERSION=v0.27.3
 ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
-# gRPC v1.82.1 is reported by Xray as XRAY-1057286 (High, CWE-400)
-# and XRAY-1057284 (Medium, CWE-863); both are fixed in v1.83.1.
-ARG GO_GRPC_VERSION=v1.83.1
+# mcp-go v0.43.2 is reported by Xray as CVE-2026-81092 (6.8, CWE-346),
+# fixed in v0.56.0.
+ARG GO_MCP_GO_VERSION=v0.56.0
+# gRPC v1.82.1 is reported by Xray as CVE-2026-84445 (CWE-129, CWE-248),
+# fixed in v1.83.2. This also remains above the prior Xray fixes v1.83.1.
+ARG GO_GRPC_VERSION=v1.83.2
 
 FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS source
 ARG BIFROST_VERSION
@@ -89,9 +92,11 @@ ARG GO_GIT_VERSION
 ARG GO_OPENAPI_SPEC_VERSION
 ARG GO_OPENAPI_SWAG_VERSION
 ARG GO_OPENAPI_VALIDATE_VERSION
+ARG GO_MCP_GO_VERSION
 ARG GO_GRPC_VERSION
 RUN set -eu; \
     GOFLAGS=-mod=mod go get \
+      "github.com/mark3labs/mcp-go@${GO_MCP_GO_VERSION}" \
       "golang.org/x/text@${GO_TEXT_VERSION}" \
       "golang.org/x/net@${GO_NET_VERSION}" \
       "github.com/go-git/go-git/v5@${GO_GIT_VERSION}" \
@@ -108,6 +113,7 @@ RUN set -eu; \
       "github.com/go-openapi/swag/jsonutils=${GO_OPENAPI_SWAG_VERSION}" \
       "github.com/go-openapi/swag/yamlutils=${GO_OPENAPI_SWAG_VERSION}" \
       "github.com/go-openapi/validate=${GO_OPENAPI_VALIDATE_VERSION}" \
+      "github.com/mark3labs/mcp-go=${GO_MCP_GO_VERSION}" \
       "google.golang.org/grpc=${GO_GRPC_VERSION}"; \
     do \
       module="${pin%=*}"; expected="${pin##*=}"; \
