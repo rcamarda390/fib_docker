@@ -2,7 +2,8 @@ name: docker-socket-proxy
 upstream_version: 0.5.0
 revision: 1
 build_args:
-  DOCKER_SOCKET_PROXY_DIGEST: "sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459"
+  HAPROXY_VERSION: "3.5-dev6"
+  HAPROXY_DIGEST: "sha256:447fc45c1e65f9b67d7333c97aa72de64bc892831281e0a4cc2770b46e8016d7"
 publish:
   ghcr: true
   dockerhub: true
