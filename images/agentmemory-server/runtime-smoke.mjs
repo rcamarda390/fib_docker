@@ -75,7 +75,7 @@ try {
   await call("/agentmemory/search", secret, {
     query: marker,
     limit: 1,
-    format: "summary",
+    format: "compact",
   });
   console.log("AgentMemory runtime, health, memory_save, and memory_recall smoke OK");
 } finally {
