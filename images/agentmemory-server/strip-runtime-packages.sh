@@ -83,14 +83,17 @@ done
 
 chroot "$runtime_root" /usr/bin/openssl rand -hex 32 \
     | grep -Eq '^[0-9a-f]{64}$'
-chroot "$runtime_root" /usr/sbin/gosu node:node /usr/local/bin/node \
+# ponytail: this copied root has no procfs, so gosu cannot resolve
+# /proc/self/exe here. Use chroot's user switch for build-only validation;
+# the workflow smoke exercises gosu in the real Docker runtime.
+chroot --userspec=node:node "$runtime_root" /usr/local/bin/node \
     -e "require('node:zlib').gzipSync('runtime dependency check'); console.log('node runtime OK')"
 chroot "$runtime_root" /usr/local/bin/node --input-type=module \
     -e "await import('iii-sdk'); console.log('iii-sdk runtime OK')"
-chroot "$runtime_root" /usr/bin/env \
+chroot --userspec=node:node "$runtime_root" /usr/bin/env \
     TRANSFORMERS_MODEL_PATH=/opt/agentmemory/models \
     TRANSFORMERS_CACHE_DIR=/opt/agentmemory/transformers-cache \
     TRANSFORMERS_OFFLINE=1 \
     HF_HUB_OFFLINE=1 \
     NODE_OPTIONS=--import=/opt/agentmemory/transformers-offline.mjs \
-    /usr/local/bin/agentmemory-entrypoint.sh --offline-embedding-test
+    /usr/local/bin/node /opt/agentmemory/offline-embedding-smoke.mjs
