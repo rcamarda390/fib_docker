@@ -40,6 +40,12 @@ on:
         required: false
         default: ""
         type: string
+      # Additional bind mounts needed by health checks for services whose
+      # runtime depends on a host-provided socket or other local resource.
+      smoke_volumes:
+        required: false
+        default: ""
+        type: string
       # Run the direct smoke command in a network-disabled container. This is
       # separate from smoke_env because health checks need the normal Docker
       # network/port-publishing path to reach the service.
@@ -404,11 +410,12 @@ jobs:
         env:
           IMAGE: mcp-smoke:${{ github.run_id }}
           SMOKE_ENV: ${{ inputs.smoke_env }}
+          SMOKE_VOLUMES: ${{ inputs.smoke_volumes }}
           PORT: ${{ inputs.smoke_healthcheck_port }}
           HEALTH_PATH: ${{ inputs.smoke_healthcheck_path }}
         run: |
           set -euo pipefail
-          container_id=$(docker run -d $SMOKE_ENV -p "127.0.0.1:${PORT}:${PORT}" "$IMAGE")
+          container_id=$(docker run -d $SMOKE_ENV $SMOKE_VOLUMES -p "127.0.0.1:${PORT}:${PORT}" "$IMAGE")
           cleanup() {
             echo "----- container logs -----"
             docker logs "$container_id" 2>&1 | tail -100 || true
