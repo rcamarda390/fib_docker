@@ -220,9 +220,15 @@ RUN set -eux; \
     for path in bin etc home lib lib64 opt sbin usr var; do \
       if [ -e "/$path" ]; then cp -a "/$path" /runtime-root/; fi; \
     done; \
-    install -d -m 0755 /runtime-root/data /runtime-root/run; \
+    install -d -m 0755 /runtime-root/data /runtime-root/dev /runtime-root/run; \
     install -d -m 1777 /runtime-root/tmp; \
-    /usr/local/lib/strip-runtime-packages.sh /runtime-root
+    # dpkg --root runs maintainer scripts inside the copied root. Give those \
+    # scripts a temporary null sink; Docker supplies the real /dev at runtime. \
+    : > /runtime-root/dev/null; \
+    chmod 0666 /runtime-root/dev/null; \
+    /usr/local/lib/strip-runtime-packages.sh /runtime-root; \
+    rm -f /runtime-root/dev/null; \
+    rmdir /runtime-root/dev
 
 FROM scratch AS runtime
 COPY --from=runtime_rootfs /runtime-root/ /
