@@ -2,6 +2,11 @@ name: Build and publish Docker Socket Proxy image
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "images/docker-socket-proxy/**"
+      - ".github/workflows/build-docker-socket-proxy.yml"
+      - ".github/workflows/build-image.yml"
 
 # Serialize publications so two dispatches cannot calculate the same next tag.
 concurrency:
