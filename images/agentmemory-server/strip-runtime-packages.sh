@@ -88,7 +88,8 @@ chroot "$runtime_root" /usr/bin/openssl rand -hex 32 \
 # the workflow smoke exercises gosu in the real Docker runtime.
 chroot --userspec=node:node "$runtime_root" /usr/local/bin/node \
     -e "require('node:zlib').gzipSync('runtime dependency check'); console.log('node runtime OK')"
-chroot "$runtime_root" /usr/local/bin/node --input-type=module \
+chroot --userspec=node:node "$runtime_root" /usr/bin/env \
+    -C /opt/agentmemory /usr/local/bin/node --input-type=module \
     -e "await import('iii-sdk'); console.log('iii-sdk runtime OK')"
 chroot --userspec=node:node "$runtime_root" /usr/bin/env \
     TRANSFORMERS_MODEL_PATH=/opt/agentmemory/models \
