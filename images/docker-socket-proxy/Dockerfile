@@ -16,9 +16,11 @@ USER root
 # fixed 3.5.8-r0 packages. HAProxy 3.5-dev6 includes the upstream fix for
 # CVE-2026-90678, which affects 3.5-dev1 through 3.5-dev5.
 RUN set -eux; \
-    apk upgrade --no-cache; \
-    apk info -v libssl3 | grep -Fx "libssl3-3.5.8-r0"; \
-    apk info -v libcrypto3 | grep -Fx "libcrypto3-3.5.8-r0"; \
+    apk add --no-cache --upgrade \
+        "libssl3=3.5.8-r0" \
+        "libcrypto3=3.5.8-r0"; \
+    apk info -e "libssl3=3.5.8-r0"; \
+    apk info -e "libcrypto3=3.5.8-r0"; \
     haproxy -vv | grep -F "HAProxy version ${HAPROXY_VERSION}"
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-socket-proxy-entrypoint.sh
