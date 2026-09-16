@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -eu
+set -eux
 
 runtime_root=${1:?runtime root is required}
 if [ "$runtime_root" != /runtime-root ]; then
@@ -25,13 +25,18 @@ for package in apt libapt-pkg7.0 debian-archive-keyring sqv dpkg tar gzip; do
     test "$(package_state "$package")" = installed
 done
 
-# Perl was removed after all apt/npm work in the source root. Keep a minimal
-# debconf stub available while package maintainer scripts run in the copied
-# root, without changing the intact build root.
-test ! -e "$runtime_root/usr/share/debconf/frontend"
+# Perl was removed after all apt/npm work in the source root, but debconf's
+# Perl frontend remains. Preserve it while a minimal shell stub services any
+# package maintainer scripts in the copied root. The intact build root is not
+# changed, and the original frontend is restored after the transaction.
+debconf_frontend="$runtime_root/usr/share/debconf/frontend"
+debconf_frontend_backup="$runtime_root/tmp/debconf-frontend.perl"
+test -e "$debconf_frontend"
+test ! -e "$debconf_frontend_backup"
+mv "$debconf_frontend" "$debconf_frontend_backup"
 mkdir -p "$runtime_root/usr/share/debconf"
-printf '#!/bin/sh\nexit 0\n' > "$runtime_root/usr/share/debconf/frontend"
-chmod 0755 "$runtime_root/usr/share/debconf/frontend"
+printf '#!/bin/sh\nexit 0\n' > "$debconf_frontend"
+chmod 0755 "$debconf_frontend"
 
 # Operate on the copied root with the build root's dpkg executable. This lets
 # dpkg remove itself last without damaging the build environment used to
@@ -45,7 +50,8 @@ dpkg --root="$runtime_root" --purge --force-depends --force-remove-essential \
 dpkg --root="$runtime_root" --purge --force-depends --force-remove-essential \
     --force-remove-protected dpkg
 
-rm -f "$runtime_root/usr/share/debconf/frontend"
+rm -f "$debconf_frontend"
+mv "$debconf_frontend_backup" "$debconf_frontend"
 
 for package in apt libapt-pkg7.0 debian-archive-keyring sqv dpkg tar gzip \
                libsystemd0 libudev1 libpcre2-8-0 perl-base curl; do
