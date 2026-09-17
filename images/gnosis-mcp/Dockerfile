@@ -34,11 +34,6 @@ RUN set -eux; \
     apt-get source "glibc=${GLIBC_DEBIAN_VERSION}"; \
     cd "glibc-${GLIBC_DEBIAN_VERSION%%-*}"; \
     for patch_spec in \
-      "2b789d4ca95c73dc6fc456bf8a767e8b586e2539:38289cf413002206fb647b6d05981c13535b28d1cde144c03bc032f4dd539e5e" \
-      "6448c1174ae74756e9db3ba26463a450e38be6c1:b2d78661fe7b678259914f5d477a379a385a7a09306c0f9229f7db75a447ff3c" \
-      "1c77f57252fd8cfeb30c988a001cd1aab172483b:442c818cb98e2f6574ff31c277574cc524d7ea249cb198d23b3dd4669b513563" \
-      "0e8c56b386d72ba2ddf15784423f2e894c63a241:30dc13347a8c63383eeb21868f91ce345651b2fd2067aaae75ad1305e0053348" \
-      "05e1eaea619072a92ff1f5fefe1ac2dd5758829c:0189d3364f0f72c01ae23d62035618151f02158f7e3e73b2b6be13de33f6698c" \
       "965b580070b8184b0dd390800d9194291a600e67:e564c003db5103b22e5b5ed8d624690ca6722eb1cd1c5b867649a345694a7bdd" \
       "dfc8ef388ef7856f318ade7dec501f92ce54f9e3:d8646d3888c1c6bff55e77bbf275f5549391f4536efcd176c2a1e654857f8f4b" \
       "9318c2571576017d280a31b7b9ab576c9b696b1a:4dac7eb1610b938dbb3c9ddc390bdf0f4da01e1f757a47f61022ed45bffaa88e" \
@@ -262,7 +257,9 @@ RUN mkdir -p /data /docs \
 # Remove optional Python extensions first, then purge the native packages that
 # only supported those extensions or image construction. The running service
 # uses Python for compression, file operations, and UUID generation, so the
-# corresponding command-line packages are not runtime requirements.
+# corresponding command-line packages are not runtime requirements. dpkg's
+# helper programs are purged in the final invocation; dpkg may exit 2 after
+# successfully removing tar and diff, so every target is verified afterward.
 RUN rm -f \
         /usr/local/lib/python*/lib-dynload/_bz2*.so \
         /usr/local/lib/python*/lib-dynload/_curses*.so \
@@ -278,13 +275,20 @@ RUN rm -f \
         ncurses-bin ncurses-base libncursesw6 readline-common libreadline8t64 \
         libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 \
         perl-base login login.defs passwd \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        bash bsdutils diffutils gzip sed tar \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
     && rm -rf /usr/share/debconf /var/cache/apt /var/lib/apt/lists \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        coreutils
+    && purge_status=0 \
+    && { dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+            libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
+            bash bsdutils gzip sed coreutils diffutils tar \
+            || purge_status="$?"; } \
+    && { test "$purge_status" -eq 0 || test "$purge_status" -eq 2; } \
+    && for package in \
+        libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
+        bash bsdutils gzip sed coreutils diffutils tar; do \
+        package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
+        test "$package_state" != "installed" \
+            || { echo "$package is still installed after purge" >&2; exit 1; }; \
+       done
 
 USER gnosis
 WORKDIR /home/gnosis
