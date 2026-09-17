@@ -37,7 +37,7 @@ the replacement shared library.
 ### glibc
 
 `libc6` remains load-bearing. The Debian Trixie source is rebuilt as
-`2.41-12+deb13u4+rcamarda2` with checksum-pinned release/2.41 commits for:
+`2.41-12+deb13u4+rcamarda2` with release/2.41 backports for:
 
 - CVE-2026-5435 and CVE-2026-6238 (`ns_sprintrrf`)
 - CVE-2026-6791 and CVE-2026-6368 (`wordexp`)
@@ -46,9 +46,11 @@ the replacement shared library.
 - CVE-2026-77117 and CVE-2026-80489 (`iconv`)
 - CVE-2026-18374 (`ccs=` handling)
 
-The existing CVE-2026-5450 patch is retained. The build fails if a patch
-checksum changes, or if a patch is neither applicable nor already present in
-the Debian source.
+The resolver fixes are narrow source-equivalent patches adapted to Debian's
+2.41 context. The remaining upstream patches are checksum-pinned, and the
+existing CVE-2026-5450 patch is retained. The build fails if a downloaded
+patch checksum changes, or if any patch is neither applicable nor already
+present in the Debian source.
 
 CVE-2026-89092 applies to the `nscd` service; neither the `nscd` package nor
 its service is present. Debian and upstream classify CVE-2018-20796,
