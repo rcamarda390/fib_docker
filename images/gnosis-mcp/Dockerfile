@@ -257,7 +257,9 @@ RUN mkdir -p /data /docs \
 # Remove optional Python extensions first, then purge the native packages that
 # only supported those extensions or image construction. The running service
 # uses Python for compression, file operations, and UUID generation, so the
-# corresponding command-line packages are not runtime requirements.
+# corresponding command-line packages are not runtime requirements. dpkg's
+# helper programs are purged in the final invocation; dpkg may exit 2 after
+# successfully removing tar and diff, so every target is verified afterward.
 RUN rm -f \
         /usr/local/lib/python*/lib-dynload/_bz2*.so \
         /usr/local/lib/python*/lib-dynload/_curses*.so \
@@ -273,13 +275,20 @@ RUN rm -f \
         ncurses-bin ncurses-base libncursesw6 readline-common libreadline8t64 \
         libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 \
         perl-base login login.defs passwd \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        bash bsdutils diffutils gzip sed tar \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
     && rm -rf /usr/share/debconf /var/cache/apt /var/lib/apt/lists \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        coreutils
+    && purge_status=0 \
+    && { dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+            libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
+            bash bsdutils gzip sed coreutils diffutils tar \
+            || purge_status="$?"; } \
+    && { test "$purge_status" -eq 0 || test "$purge_status" -eq 2; } \
+    && for package in \
+        libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
+        bash bsdutils gzip sed coreutils diffutils tar; do \
+        package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
+        test "$package_state" != "installed" \
+            || { echo "$package is still installed after purge" >&2; exit 1; }; \
+       done
 
 USER gnosis
 WORKDIR /home/gnosis
