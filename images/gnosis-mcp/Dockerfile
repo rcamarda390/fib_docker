@@ -1,17 +1,14 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gnosis-mcp — air-gap variant (v11)
+# gnosis-mcp — air-gap variant
 # =============================================================================
 # Patch: gnosis-mcp 0.14.0 rest.py does not wire session_manager.run() into
 # the Starlette lifespan when mounting StreamableHTTP alongside REST API.
 # This causes RuntimeError: Task group is not initialized on every /mcp request.
 # Fix: inject a combined lifespan that runs both REST backend AND session_manager.
-# Security: Python 3.13 on Debian Trixie plus a coherently rebuilt glibc pair.
-# Debian deb13u4 supplies CVE-2026-5928. Local patches retain the other
-# required glibc fixes. PAM and build utilities are removed from the final image
-# because this is a non-login service. SQLite is replaced with a
-# checksum-pinned upstream build that retains required FTS5 and extension
-# functionality.
+# Security: Python 3.13 on Debian Trixie plus checksum-pinned glibc, SQLite,
+# and zlib fixes. Packages that are not required by the service are removed
+# from the final filesystem. See SECURITY-v17.md for the finding disposition.
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13
@@ -21,7 +18,7 @@ ARG PYTHON_VERSION=3.13
 # ---------------------------------------------------------------------------
 ARG DEBIAN_SUITE=trixie
 ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u4
-ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u4+rcamarda1
+ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u4+rcamarda2
 
 FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
 ARG DEBIAN_SUITE
@@ -31,11 +28,37 @@ COPY patches/glibc/ /tmp/glibc-patches/
 RUN set -eux; \
     sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates devscripts dpkg-dev git quilt; \
+    apt-get install -y --no-install-recommends ca-certificates curl devscripts dpkg-dev git quilt; \
     apt-get build-dep -y --no-install-recommends "glibc=${GLIBC_DEBIAN_VERSION}"; \
     mkdir -p /build /out; cd /build; \
     apt-get source "glibc=${GLIBC_DEBIAN_VERSION}"; \
     cd "glibc-${GLIBC_DEBIAN_VERSION%%-*}"; \
+    for patch_spec in \
+      "2b789d4ca95c73dc6fc456bf8a767e8b586e2539:38289cf413002206fb647b6d05981c13535b28d1cde144c03bc032f4dd539e5e" \
+      "6448c1174ae74756e9db3ba26463a450e38be6c1:b2d78661fe7b678259914f5d477a379a385a7a09306c0f9229f7db75a447ff3c" \
+      "1c77f57252fd8cfeb30c988a001cd1aab172483b:442c818cb98e2f6574ff31c277574cc524d7ea249cb198d23b3dd4669b513563" \
+      "0e8c56b386d72ba2ddf15784423f2e894c63a241:30dc13347a8c63383eeb21868f91ce345651b2fd2067aaae75ad1305e0053348" \
+      "05e1eaea619072a92ff1f5fefe1ac2dd5758829c:0189d3364f0f72c01ae23d62035618151f02158f7e3e73b2b6be13de33f6698c" \
+      "965b580070b8184b0dd390800d9194291a600e67:e564c003db5103b22e5b5ed8d624690ca6722eb1cd1c5b867649a345694a7bdd" \
+      "dfc8ef388ef7856f318ade7dec501f92ce54f9e3:d8646d3888c1c6bff55e77bbf275f5549391f4536efcd176c2a1e654857f8f4b" \
+      "9318c2571576017d280a31b7b9ab576c9b696b1a:4dac7eb1610b938dbb3c9ddc390bdf0f4da01e1f757a47f61022ed45bffaa88e" \
+      "5256941bc811248670eda4636dccd0a390d34dec:aaa730edd654b954bc7f2b82eaadee091d87c47c5ea250a9f579172cfbda6b96" \
+      "e43e46f94398b3de446fec11da1e7633ea5202ec:b521dbf688487b2a6f3f4f51cc5968382cff04d556c56c25ae87b3b4905ce823" \
+      "ec116a0fbedcc860631e525e70b409cf295f27da:eb93b11c64893543ad81a8afffbc9d51c822f8d60fc416439433f37dfcbc66cd" \
+      "f806c45178dbca3be08a25cc5dd6d5542ce84a59:ffad85d2a8e7e6b420e085483a1ae1031a13421b5eb7c1df281b6e35468eb9c3"; do \
+      commit="${patch_spec%%:*}"; checksum="${patch_spec#*:}"; \
+      patch="/tmp/glibc-${commit}.patch"; \
+      curl -fsSL "https://sourceware.org/git/?p=glibc.git;a=patch;h=${commit}" -o "$patch"; \
+      echo "$checksum  $patch" | sha256sum -c -; \
+      if git apply --check "$patch"; then \
+        git apply "$patch"; \
+      elif git apply --reverse --check "$patch"; then \
+        echo "Upstream patch already present in Debian source: $commit"; \
+      else \
+        echo "Upstream patch is neither applicable nor already present: $commit" >&2; \
+        exit 1; \
+      fi; \
+    done; \
     for patch in /tmp/glibc-patches/*.patch; do \
       if git apply --check "$patch"; then \
         git apply "$patch"; \
@@ -48,33 +71,11 @@ RUN set -eux; \
     done; \
     DEBFULLNAME="rcamarda390 image build" DEBEMAIL="rcamarda390@users.noreply.github.com" \
       dch --force-distribution --distribution "${DEBIAN_SUITE}" --newversion "${GLIBC_BACKPORT_VERSION}" \
-      "Rebuild from Debian deb13u4; retain local backports for CVE-2026-5435 and CVE-2026-5450."; \
+      "Backport glibc fixes through release/2.41 commit f806c451, including CVE-2026-19499 and the 2026 resolver/iconv fixes."; \
     DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -B -uc -us -j"$(nproc)"; \
     cp ../libc6_*_*.deb ../libc-bin_*_*.deb /out/; \
     dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
     dpkg-deb -f /out/libc-bin_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"
-
-# Xray v12: libacl1 2.3.2-2+b1 (CVE-2026-54369), libattr1 1:2.5.2-3
-# (CVE-2026-54371), ncurses-bin 6.5+20250216-2 (CVE-2025-69720), and
-# util-linux family 2.41.5-0+deb13u1 (CVE-2026-76642/78408/78409/78410).
-# See SECURITY-v12.md for fixed releases, source evidence and residual findings.
-# Rebuild Debian packages on Trixie; do not import sid runtime binaries.
-FROM debian:${DEBIAN_SUITE}-slim AS native_patched
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git dpkg-dev build-essential
-WORKDIR /build
-COPY prepare-native-sources.sh /tmp/prepare-native-sources.sh
-RUN sh /tmp/prepare-native-sources.sh \
-    && mkdir /out \
-    && for package in attr acl ncurses util-linux; do \
-        apt-get build-dep -y --no-install-recommends "./$package" || exit 1; \
-        if [ "$package" = acl ]; then \
-          (cd "$package" && DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
-        else \
-          (cd "$package" && dpkg-buildpackage -b -uc -us -j"$(nproc)") || exit 1; \
-        fi; \
-       done \
-    && cp ./*.deb /out/
 
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder
 
@@ -105,6 +106,26 @@ RUN curl -fsSL "https://sqlite.org/2026/sqlite-autoconf-${SQLITE_AUTOCONF}.tar.g
     && make install \
     && test "$(LD_LIBRARY_PATH=/opt/sqlite/lib /opt/sqlite/bin/sqlite3 :memory: 'select sqlite_version();')" = "${SQLITE_VERSION}" \
     && rm -rf /tmp/sqlite.tar.gz "/tmp/sqlite-autoconf-${SQLITE_AUTOCONF}"
+
+# zlib 1.3.2 fixes CVE-2026-27171. CVE-2026-85091 was fixed after that
+# release, so apply and checksum the exact upstream commit as well.
+ARG ZLIB_VERSION=1.3.2
+ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+ARG ZLIB_CVE_PATCH_SHA256=110ff14375733173d8aa54574473424fbd7dfe4b81f1ca34a759c6fe14b15b14
+RUN curl -fsSL "https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz" -o /tmp/zlib.tar.gz \
+    && echo "${ZLIB_SHA256}  /tmp/zlib.tar.gz" | sha256sum -c - \
+    && curl -fsSL "https://github.com/madler/zlib/commit/df84af25dc1942490e1d1c899a07619152a46148.patch" \
+        -o /tmp/zlib-cve-2026-85091.patch \
+    && echo "${ZLIB_CVE_PATCH_SHA256}  /tmp/zlib-cve-2026-85091.patch" | sha256sum -c - \
+    && tar --no-same-owner -xzf /tmp/zlib.tar.gz -C /tmp \
+    && cd "/tmp/zlib-${ZLIB_VERSION}" \
+    && patch -p1 < /tmp/zlib-cve-2026-85091.patch \
+    && ./configure --prefix=/opt/zlib \
+    && make -j"$(nproc)" \
+    && make test \
+    && make install \
+    && test "$(LD_LIBRARY_PATH=/opt/zlib/lib ./example | sed -n '1s/^zlib version \([^ ]*\).*/\1/p')" = "${ZLIB_VERSION}" \
+    && rm -rf /tmp/zlib.tar.gz /tmp/zlib-cve-2026-85091.patch "/tmp/zlib-${ZLIB_VERSION}"
 
 WORKDIR /build
 
@@ -155,10 +176,11 @@ RUN set -e; \
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime_rootfs
 
 ARG SQLITE_VERSION=3.53.4
+ARG ZLIB_VERSION=1.3.2
 ARG GLIBC_BACKPORT_VERSION
 COPY --from=builder /opt/sqlite/lib/libsqlite3.so* /usr/local/lib/
+COPY --from=builder /opt/zlib/lib/libz.so* /usr/local/lib/
 COPY --from=glibc_patched /out/ /tmp/glibc/
-COPY --from=native_patched /out/ /tmp/native/
 
 # Xray's fixed floor for CVE-2026-63072, CVE-2026-54874,
 # CVE-2026-18798, CVE-2026-63076, CVE-2026-63075, CVE-2026-14457,
@@ -172,14 +194,6 @@ ARG GZIP_MIN_VERSION=1.13-1+deb13u1
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends /tmp/glibc/libc6_*_*.deb /tmp/glibc/libc-bin_*_*.deb \
-    && set -- \
-    && for archive in /tmp/native/*.deb; do \
-        package="$(dpkg-deb -f "$archive" Package)"; \
-        state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
-        if [ "$state" = installed ]; then set -- "$@" "$archive"; fi; \
-       done \
-    && test "$#" -gt 0 \
-    && apt-get install -y --no-install-recommends "$@" \
     && apt-get install -y --no-install-recommends \
         libgomp1 \
         libssl3t64 \
@@ -203,16 +217,12 @@ RUN apt-get update \
         dpkg --compare-versions "$installed_version" ge "$floor" \
             || { echo "$package is below required version $floor" >&2; exit 1; }; \
        done \
+    && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
+    && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
     && useradd --system --create-home --home-dir /home/gnosis --shell /bin/false gnosis \
-    && rm -rf /tmp/glibc /tmp/native /var/lib/apt/lists/* \
-    && mkdir -p /usr/share/debconf \
-    && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
-    && chmod 0755 /usr/share/debconf/frontend \
-    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
-        libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 \
-        perl-base login passwd \
-    && rm -rf /usr/share/debconf \
-    && ldconfig
+    && rm -rf /tmp/glibc /var/lib/apt/lists/* \
+    && ldconfig \
+    && python -c "import zlib; assert zlib.ZLIB_RUNTIME_VERSION == '${ZLIB_VERSION}'"
 
 COPY --from=builder /install             /usr/local
 COPY --from=builder /gnosis-model-cache  /gnosis-model-cache
@@ -249,6 +259,33 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN mkdir -p /data /docs \
     && chown -R gnosis:gnosis /data /home/gnosis /gnosis-model-cache
 
+# Remove optional Python extensions first, then purge the native packages that
+# only supported those extensions or image construction. The running service
+# uses Python for compression, file operations, and UUID generation, so the
+# corresponding command-line packages are not runtime requirements.
+RUN rm -f \
+        /usr/local/lib/python*/lib-dynload/_bz2*.so \
+        /usr/local/lib/python*/lib-dynload/_curses*.so \
+        /usr/local/lib/python*/lib-dynload/_uuid*.so \
+        /usr/local/lib/python*/lib-dynload/readline*.so \
+    && mkdir -p /usr/share/debconf \
+    && printf '#!/bin/sh\nexit 0\n' > /usr/share/debconf/frontend \
+    && chmod 0755 /usr/share/debconf/frontend \
+    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+        apt libapt-pkg7.0 \
+        util-linux mount libmount1 libblkid1 libsmartcols1 libuuid1 \
+        libudev1 libsystemd0 \
+        ncurses-bin ncurses-base libncursesw6 readline-common libreadline8t64 \
+        libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 \
+        perl-base login login.defs passwd \
+    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+        bash bsdutils diffutils gzip sed tar \
+    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+        libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
+    && rm -rf /usr/share/debconf /var/cache/apt /var/lib/apt/lists \
+    && dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+        coreutils
+
 USER gnosis
 WORKDIR /home/gnosis
 
@@ -263,25 +300,23 @@ RUN ! command -v pip \
     && ! python -c "import pip" 2>/dev/null \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/pip/_vendor/*' -print -quit)" \
     && test -z "$(find /usr/local /usr/lib -type f -path '*/ensurepip/_bundled/*' -print -quit)" \
-    && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0 \
-                     perl-base; do \
+    && for package in \
+        apt libapt-pkg7.0 bash bsdutils coreutils diffutils gzip sed tar \
+        libacl1 libattr1 libbz2-1.0 libc-bin libmount1 libncursesw6 libsystemd0 \
+        libudev1 libuuid1 login.defs ncurses-base util-linux zlib1g \
+        libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0 perl-base; do \
         package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
         test "$package_state" != "installed" || { echo "$package is still installed" >&2; exit 1; }; \
        done \
-    && /bin/bash --noprofile --norc -c true \
-    && python -c "import curses, readline; curses.setupterm(term='xterm')" \
     && python /usr/local/share/gnosis/verify-native-runtime.py \
     && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
-    && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
     && python -c "import sqlite3, sqlite_vec; assert sqlite3.sqlite_version == '${SQLITE_VERSION}'; db=sqlite3.connect(':memory:'); db.execute('create virtual table docs using fts5(body)'); db.execute(\"insert into docs values ('security fixed')\"); assert db.execute(\"select count(*) from docs where docs match 'fixed'\").fetchone()[0] == 1; db.enable_load_extension(True); db.load_extension(sqlite_vec.loadable_path()); db.execute('create virtual table vectors using vec0(embedding float[2])')" \
     && python -c "from importlib.metadata import version; from packaging.version import Version; assert Version(version('setuptools')) >= Version('80.10.0'); assert Version(version('msgpack')) >= Version('1.2.1'); assert Version(version('PyJWT')) >= Version('2.14.0')" \
     && python -c "import gnosis_mcp; print('Verification: gnosis-mcp OK')"
 
-# The prior image report identifies packages from superseded Python/Debian base
-# layers even though this stage upgrades or replaces them and verifies the
-# final package state above. Publish one root filesystem layer instead, so Xray
-# inspects the same final state that runs in production. This does not hide a
-# package: /var/lib/dpkg and every installed file are copied intact.
+# Publish one root filesystem layer so Xray inspects the same minimized final
+# state that runs in production. The dpkg database remains available for SBOM
+# generation even though package-management commands are not supported.
 FROM scratch AS runtime
 COPY --from=runtime_rootfs / /
 
