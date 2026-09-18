@@ -10,8 +10,9 @@ ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u4+rcamarda1
 ARG PIP_VERSION=26.2.1
 ARG LITELLM_VERSION=1.96.2
 ARG PYJWT_VERSION=2.14.0
-ARG TOKENIZERS_VERSION=0.23.1
+ARG TOKENIZERS_VERSION=0.23.2
 ARG TRANSFORMERS_VERSION=5.17.0
+ARG URLLIB3_VERSION=2.8.0
 ARG RUSTUP_VERSION=1.28.2
 ARG SQLITE_VERSION=3.53.4
 ARG SQLITE_AUTOCONF=3530400
@@ -19,6 +20,14 @@ ARG SQLITE_SHA3=454e45f61c6bd75b7420e7190732dea03ce6639c63ada47bbc592f67fc340338
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=b99a0b86c0ba9360ec7e78c4f1e43b1cbdf1e6936c8fa0f6835c0cd694a495a1
 
+# The three patches below carry CVE-2026-5928 (BZ #33998), CVE-2026-5435
+# (BZ #34033), and CVE-2026-5450 (BZ #34008). Xray's follow-up scan of
+# 0.37.0-v12 still reports CVE-2026-5435 against libc-bin/libc6 -- it matches
+# the vulnerable package by name/CPE and cannot read the "+rcamarda1" local
+# Debian revision that carries the cherry-picked fix. The version assertion at
+# the end of the runtime stage (libc6/libc-bin == GLIBC_BACKPORT_VERSION) is
+# the proof this exact patched build is what ships; no further source change
+# addresses this finding.
 FROM debian:${DEBIAN_SUITE}-slim AS glibc_patched
 ARG DEBIAN_SUITE
 ARG GLIBC_DEBIAN_VERSION
@@ -52,7 +61,7 @@ RUN set -eux; \
       DEBEMAIL="rcamarda390@users.noreply.github.com" \
       dch --force-distribution --distribution "${DEBIAN_SUITE}" \
         --newversion "${GLIBC_BACKPORT_VERSION}" \
-        "Rebuild from Debian deb13u4; retain local backports for CVE-2026-5435 and CVE-2026-5450."; \
+        "Rebuild from Debian deb13u4; retain local backports for CVE-2026-5435, CVE-2026-5450, and CVE-2026-5928."; \
     DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -B -uc -us -j"$(nproc)"; \
     cp ../libc6_*_*.deb ../libc-bin_*_*.deb /out/; \
     dpkg-deb -f /out/libc6_*_*.deb Version | grep -Fx "${GLIBC_BACKPORT_VERSION}"; \
@@ -74,6 +83,7 @@ ARG LITELLM_VERSION
 ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
+ARG URLLIB3_VERSION
 ARG RUSTUP_VERSION
 ARG SQLITE_VERSION
 ARG SQLITE_AUTOCONF
@@ -184,9 +194,11 @@ RUN uv pip install --python /opt/venv/bin/python --upgrade-package litellm \
 # XRAY-1076201, XRAY-1076198, XRAY-1076197, XRAY-1076195, and XRAY-1076185
 # (each CVSS 7.4). Their fixed floor is 2.14.0. CVE-2026-85670 separately
 # fixes Tokenizers 0.22.2 in 0.23.1; Transformers 5.13.1 caps Tokenizers at
-# 0.23.0, so move both packages together within Headroom's declared >=5.5,<6
-# compatibility range. This downstream override is scoped to these package
-# families; remove it when Headroom locks these or newer releases itself.
+# 0.23.0. Headroom 0.37.0's installed Transformers 5.17.0 allows
+# tokenizers>=0.23.1,<0.24.0, so 0.23.2 (the latest release in that range as
+# of the 2026-09-18 scan) is used instead of the 0.23.1 floor. This downstream
+# override is scoped to these package families; remove it when Headroom locks
+# these or newer releases itself.
 RUN uv pip install --python /opt/venv/bin/python \
       --upgrade-package PyJWT \
       --upgrade-package tokenizers \
@@ -199,6 +211,21 @@ RUN uv pip install --python /opt/venv/bin/python \
        assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
        assert tokenizers.__version__ == '${TOKENIZERS_VERSION}'; \
        assert transformers.__version__ == '${TRANSFORMERS_VERSION}'" \
+    && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
+# The 2026-09-18 Xray scan reports XRAY-1079914 (CWE-295/440) and XRAY-1079919
+# (CWE-835) against the upstream lock's urllib3 2.7.0 with no fixed version
+# published yet, plus XRAY-1079926 (CWE-770) whose stated fix floor, 2.7.0, is
+# already installed. urllib3 2.8.0 (released 2026-09-15, three days before the
+# scan) is the newest release on PyPI; move to it so the image carries
+# whatever fix each advisory ships with once Xray's database catches up.
+# botocore accepts urllib3<3 for Python >=3.10, so this stays within its
+# declared range; the assertion below proves boto3/botocore still import
+# cleanly against the bumped version.
+RUN uv pip install --python /opt/venv/bin/python --upgrade-package urllib3 \
+      "urllib3==${URLLIB3_VERSION}" \
+    && PATH="/opt/venv/bin:${PATH}" python -c \
+      "import importlib.metadata, boto3, botocore; \
+       assert importlib.metadata.version('urllib3') == '${URLLIB3_VERSION}'" \
     && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
 # The setuptools/msgpack upgrades that used to live here targeted packages
 # that Headroom does not install: neither appears in the proxy+bedrock
@@ -306,6 +333,7 @@ ARG LITELLM_VERSION
 ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
+ARG URLLIB3_VERSION
 ARG GLIBC_BACKPORT_VERSION
 ARG PYTHON_VERSION
 ARG PYTHON_ABI
@@ -394,6 +422,24 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 #                                    ssl uses system certs, doesn't need libtasn1
 #   openssl         -- the CLI is unused; Python ssl retains trixie's patched
 #                      libssl runtime package.
+#   tar             CVE-2026-5704, CVE-2026-18477, CVE-2026-18508,
+#                    CVE-2005-2541 -- headroom never shells out to tar; the
+#                    only archive handling in the image is the build-time HF
+#                    artifact download (individual ONNX/tokenizer files, not
+#                    tarballs). Python's stdlib tarfile module, unaffected by
+#                    these findings, remains available if ever needed.
+#   libudev1        CVE-2026-40228, CVE-2026-15059, CVE-2023-31439,
+#                    CVE-2023-31438 -- device hot-plug enumeration. This
+#                    container runs no udev daemon and headroom never queries
+#                    device metadata.
+#   libsystemd0     CVE-2013-4392, CVE-2026-16742, CVE-2023-31437 -- systemd
+#                    IPC/journal client library. No systemd process runs as
+#                    PID 1 or otherwise in this image; headroom's proxy has no
+#                    systemd integration (no sd_notify, no journal logging).
+#   liblastlog2-2   CVE-2026-78408, CVE-2022-0563 -- records PAM login
+#                    history; already unreachable now that the libpam-*
+#                    packages above are gone, since nothing in the image
+#                    performs an interactive/PAM login.
 #
 # Headroom imports sqlite3 on the `mcp serve` path (compression cache store,
 # memory store, and Codex thread recovery), so SQLite cannot simply disappear.
@@ -432,6 +478,7 @@ RUN ldconfig \
       libacl1 libattr1 \
       libpam-runtime libpam-modules libpam-modules-bin libpam0g libtasn1-6 \
       libsqlite3-0 zlib1g openssl \
+      tar libudev1 libsystemd0 liblastlog2-2 \
  && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/headroom-cache /opt/headroom-cache
@@ -447,6 +494,23 @@ RUN find /usr/local/lib/python${PYTHON_ABI} /opt/venv \
 # stdlib module whose backing shared library a purge could plausibly remove and
 # actually exercise sqlite3 and ssl, so a bad purge fails here -- in the stage
 # that caused it -- instead of surfacing later as an opaque MCP startup error.
+# bz2 is imported and exercised below because headroom's `mcp serve` path can
+# reach it (compressed cache/session data); CVE-2026-42250 (libbz2-1.0,
+# CWE-787) has no fixed version published anywhere upstream or in Debian as of
+# the 2026-09-18 scan, so there is nothing to upgrade to and the module cannot
+# be dropped without breaking the import check that already guards this stage.
+# Tracked as an open, currently unfixable finding -- re-scan on the next
+# rebuild to pick up a Debian security update once one ships.
+#
+# CVE-2026-76642 (mount, CWE-390) fixes at util-linux 2.41.5. util-linux is
+# not pinned by this Dockerfile, so it floats to whatever trixie mirrors at
+# build time; the assertion after this block fails the build loudly instead
+# of silently shipping an older snapshot. CVE-2026-78409 (mount, CWE-59) has
+# no util-linux fix version -- Xray's "6.15" reads as a required Linux kernel
+# baseline for the underlying symlink-race protection, which this image
+# cannot supply: the kernel comes from the host the container runs on, not
+# from anything built here. Tracked as a deployment-host blocker, not an
+# image-build one.
 RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import importlib.util, ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
      assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; \
@@ -457,22 +521,26 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      ssl.create_default_context(); \
      print(f'Verification: Python stdlib (SQLite {sqlite3.sqlite_version}, FTS5, ssl, compression) OK')" \
  && PATH="/opt/venv/bin:${PATH}" python -c \
-    "import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers; \
+    "import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers, urllib3; \
      assert importlib.metadata.version('litellm') == '${LITELLM_VERSION}'; \
      assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
      assert tokenizers.__version__ == '${TOKENIZERS_VERSION}'; \
      assert transformers.__version__ == '${TRANSFORMERS_VERSION}'; \
-     print(f'Verification: LiteLLM {importlib.metadata.version(\"litellm\")}, PyJWT {importlib.metadata.version(\"PyJWT\")}, Tokenizers {tokenizers.__version__}, Transformers {transformers.__version__}; AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
+     assert importlib.metadata.version('urllib3') == '${URLLIB3_VERSION}'; \
+     print(f'Verification: LiteLLM {importlib.metadata.version(\"litellm\")}, PyJWT {importlib.metadata.version(\"PyJWT\")}, Tokenizers {tokenizers.__version__}, Transformers {transformers.__version__}, urllib3 {urllib3.__version__}; AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
  && { PATH="/opt/venv/bin:${PATH}" python -c \
     "import awscrt; print(f'  awscrt {awscrt.__version__} also available')" || true; } \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
  && test "$(dpkg-query -W -f='${Version}' libc6)" = "${GLIBC_BACKPORT_VERSION}" \
  && test "$(dpkg-query -W -f='${Version}' libc-bin)" = "${GLIBC_BACKPORT_VERSION}" \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u2' \
- && dpkg-query -W libc6 libc-bin libssl3t64 \
- && ! dpkg-query -W libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl 2>/dev/null \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' util-linux)" ge '2.41.5' \
+ && dpkg-query -W libc6 libc-bin libssl3t64 util-linux \
+ && ! dpkg-query -W libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl \
+      tar libudev1 libsystemd0 liblastlog2-2 2>/dev/null \
  && ! command -v perl \
  && ! command -v gzip \
+ && ! command -v tar \
  && ! command -v tput \
  && ! command -v openssl \
  && ! command -v pip \
