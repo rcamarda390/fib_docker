@@ -260,6 +260,11 @@ RUN mkdir -p /data /docs \
 # corresponding command-line packages are not runtime requirements. dpkg's
 # helper programs are purged in the final invocation; dpkg may exit 2 after
 # successfully removing tar and diff, so every target is verified afterward.
+# --no-triggers on that invocation stops dpkg from running debianutils'
+# deferred update-shells trigger (queued by removing bash) after coreutils
+# is gone: dirname/basename would otherwise be missing and the trigger's
+# non-zero exit would fail the whole purge. The trigger only maintains
+# /etc/shells, which this login-less final image does not use.
 RUN rm -f \
         /usr/local/lib/python*/lib-dynload/_bz2*.so \
         /usr/local/lib/python*/lib-dynload/_curses*.so \
@@ -277,7 +282,7 @@ RUN rm -f \
         perl-base login login.defs passwd \
     && rm -rf /usr/share/debconf /var/cache/apt /var/lib/apt/lists \
     && purge_status=0 \
-    && { dpkg --purge --force-depends --force-remove-essential --force-remove-protected \
+    && { dpkg --purge --no-triggers --force-depends --force-remove-essential --force-remove-protected \
             libacl1 libattr1 libbz2-1.0 libtinfo6 zlib1g libc-bin \
             bash bsdutils gzip sed coreutils diffutils tar \
             || purge_status="$?"; } \
