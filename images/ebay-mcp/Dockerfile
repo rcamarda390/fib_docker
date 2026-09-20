@@ -48,6 +48,7 @@ COPY --from=builder --chown=node:node /src/node_modules ./node_modules
 COPY --from=builder --chown=node:node /src/build ./build
 COPY --from=builder --chown=node:node /src/docs ./docs
 COPY --from=builder --chown=node:node /src/public ./public
+COPY --chown=node:node smoke-http-mcp.mjs /usr/local/bin/smoke-http-mcp.mjs
 
 ENV NODE_ENV=production \
     MCP_HOST=0.0.0.0 \

@@ -33,7 +33,7 @@ jobs:
       config: images/ebay-mcp/image.yaml
       version_arg: EBAY_MCP_VERSION
       platforms: linux/amd64
-      run_smoke_test: false
+      run_smoke_test: true
       smoke_healthcheck: true
       smoke_healthcheck_port: 3000
       smoke_healthcheck_path: /health
@@ -44,6 +44,8 @@ jobs:
         -e EBAY_MCP_TOOLS=browse,developer
         -e EBAY_READ_ONLY=true
         -e OAUTH_ENABLED=false
+      smoke_command: node,/usr/local/bin/smoke-http-mcp.mjs
+      smoke_timeout: 45
       scan: true
       block_on_scan_failure: true
       revision_from_published_tag_count: true
