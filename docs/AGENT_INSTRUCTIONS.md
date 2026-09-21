@@ -146,6 +146,40 @@ For every HIGH/CRITICAL finding supplied by the user:
 
 A successful build does not prove security remediation succeeded.
 
+### No-fix findings: conditional removal of unused components
+
+If the scanner, distribution tracker, or upstream project provides no usable fix,
+removal is allowed only when the vulnerable component is proven unnecessary in the
+**final runtime image**. This is a functional change, not a scanner workaround.
+
+Before removing it, perform and record an image-specific usage analysis:
+
+1. Trace how the component enters the final stage and whether it is needed only by
+   the builder. Keep builder-only tools in the builder; do not remove a runtime
+   dependency just because the application source does not call its CLI.
+2. Deep-dive the target application's checked-in and upstream source, startup and
+   entrypoint scripts, Dockerfile stages, build scripts, configuration, and tests
+   for direct invocation, process spawning, plugin loading, dynamic imports, or
+   bundled-binary use. For a command such as `tar`, search for both the command
+   and its common aliases/wrappers.
+3. Prove the installed dependency closure does not require it. Use the native
+   package manager's installed reverse-dependency query and inspect executable or
+   extension shared-library links where applicable. Do not infer static linking.
+4. If the evidence is incomplete or any supported runtime path needs the
+   component, do not remove it. Document the no-fix/reachability result and
+   escalate a base-image, upstream, or product decision instead.
+
+Remove the package in the final image stage after its last required package
+installation. Add a falsifiable build-time assertion that the package is absent
+from the final package database and that its executable/library is absent. Then
+run the target's normal smoke/runtime validation and re-scan the rebuilt image.
+
+For example, removal of an unused Debian `tar` package requires all of: source
+analysis showing no supported runtime use; installed reverse-dependency and
+dynamic-link checks; `dpkg --purge tar` in the final stage; assertions such as
+`! dpkg-query -W tar` and `! command -v tar`; a passing runtime smoke test; and
+a new Xray/Trivy result. Do not treat any single one of those checks as proof.
+
 ## Debian / Ubuntu base-image findings
 
 Before remediation, determine whether a Debian-family finding is:
