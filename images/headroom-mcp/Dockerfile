@@ -446,6 +446,16 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 #                    IPC/journal client library. No systemd process runs as
 #                    PID 1 or otherwise in this image; headroom's proxy has no
 #                    systemd integration (no sd_notify, no journal logging).
+#   apt, libapt-pkg7.0
+#                    CVE-2011-3374 -- package management is build-only and
+#                    this air-gapped runtime does not invoke apt after its
+#                    final package installation. Debian records the advisory
+#                    as not exploitable in Debian, but removing the unused
+#                    binaries and library eliminates the runtime attack
+#                    surface entirely.
+#   diffutils       CVE-2026-53910 -- Headroom parses and compresses diffs in
+#                    Python/Rust; it never invokes diff, diff3, or cmp. Debian
+#                    has no packaged fix, so do not retain an unused toolset.
 #   liblastlog2-2   CVE-2022-0563 -- records PAM login history; already
 #                    unreachable now that the libpam-* packages above are
 #                    gone, since nothing in the image performs an
@@ -494,6 +504,7 @@ RUN ldconfig \
       libpam-runtime libpam-modules libpam-modules-bin libpam0g libtasn1-6 \
       libsqlite3-0 zlib1g openssl \
       tar libudev1 libsystemd0 liblastlog2-2 \
+      apt libapt-pkg7.0 diffutils \
  && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/headroom-cache /opt/headroom-cache
@@ -556,10 +567,12 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' util-linux)" ge '2.41.5' \
  && dpkg-query -W libc6 libc-bin libssl3t64 util-linux \
  && ! dpkg-query -W libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl \
-      tar libudev1 libsystemd0 liblastlog2-2 2>/dev/null \
+      tar libudev1 libsystemd0 liblastlog2-2 apt libapt-pkg7.0 diffutils 2>/dev/null \
  && ! command -v perl \
  && ! command -v gzip \
  && ! command -v tar \
+ && ! command -v apt \
+ && ! command -v diff \
  && ! command -v tput \
  && ! command -v openssl \
  && ! command -v pip \
