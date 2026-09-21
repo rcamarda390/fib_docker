@@ -69,8 +69,9 @@ root `Dockerfile` and remains outside this MCP standardization.
 Xray and Trivy report a CVE when the *package version* falls in the affected
 range. Debian backports fixes without changing upstream version numbers, and it
 also declines to fix issues it considers minor, so a finding needs to be checked
-against the Debian security tracker before it is treated as either real or
-false. Record the outcome in the Dockerfile next to the package it concerns.
+against the [Debian Security Tracker](https://security-tracker.debian.org/tracker/)
+before it is treated as either real or false. Record the outcome in the
+Dockerfile next to the package it concerns.
 
 Three outcomes are possible, and they need different responses:
 
