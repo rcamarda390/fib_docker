@@ -13,6 +13,7 @@ ARG PYJWT_VERSION=2.14.0
 ARG TOKENIZERS_VERSION=0.23.2
 ARG TRANSFORMERS_VERSION=5.17.0
 ARG URLLIB3_VERSION=2.8.0
+ARG ANYIO_VERSION=4.14.2
 ARG RUSTUP_VERSION=1.28.2
 ARG SQLITE_VERSION=3.53.4
 ARG SQLITE_AUTOCONF=3530400
@@ -84,6 +85,7 @@ ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
 ARG URLLIB3_VERSION
+ARG ANYIO_VERSION
 ARG RUSTUP_VERSION
 ARG SQLITE_VERSION
 ARG SQLITE_AUTOCONF
@@ -180,6 +182,13 @@ COPY --from=source /src/headroom/ headroom/
 # LiteLLM backends. The bedrock extra adds boto3 and botocore for AWS SDK
 # support required to reach AWS Bedrock from an air-gapped GovCloud environment.
 RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
+# Debian's tracker records CVE-2026-64847, CVE-2026-63374, and
+# CVE-2026-63349 against the locked AnyIO 4.12.1; all three are fixed upstream
+# in 4.14.2. Keep the upstream lock immutable, then apply this narrow runtime
+# override until a future Headroom release locks AnyIO at the fixed floor.
+RUN uv pip install --python /opt/venv/bin/python --upgrade-package anyio \
+      "anyio==${ANYIO_VERSION}" \
+    && test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("anyio"))')" = "$ANYIO_VERSION"
 # Xray XRAY-1062440 reports Headroom 0.37.0's locked LiteLLM 1.88.1 and fixes
 # it in 1.96.2. Keep the immutable upstream lock for every other dependency,
 # then make this single, explicit downstream security override. uv mutates the
@@ -334,6 +343,7 @@ ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
 ARG URLLIB3_VERSION
+ARG ANYIO_VERSION
 ARG GLIBC_BACKPORT_VERSION
 ARG PYTHON_VERSION
 ARG PYTHON_ABI
@@ -530,6 +540,7 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      print(f'Verification: Python stdlib (SQLite {sqlite3.sqlite_version}, FTS5, ssl, compression) OK')" \
  && PATH="/opt/venv/bin:${PATH}" python -c \
     "import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers, urllib3; \
+     assert importlib.metadata.version('anyio') == '${ANYIO_VERSION}'; \
      assert importlib.metadata.version('litellm') == '${LITELLM_VERSION}'; \
      assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
      assert tokenizers.__version__ == '${TOKENIZERS_VERSION}'; \
