@@ -436,10 +436,15 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 #                    IPC/journal client library. No systemd process runs as
 #                    PID 1 or otherwise in this image; headroom's proxy has no
 #                    systemd integration (no sd_notify, no journal logging).
-#   liblastlog2-2   CVE-2026-78408, CVE-2022-0563 -- records PAM login
-#                    history; already unreachable now that the libpam-*
-#                    packages above are gone, since nothing in the image
-#                    performs an interactive/PAM login.
+#   liblastlog2-2   CVE-2022-0563 -- records PAM login history; already
+#                    unreachable now that the libpam-* packages above are
+#                    gone, since nothing in the image performs an
+#                    interactive/PAM login. (The 2026-09-18 Xray report
+#                    attributed CVE-2026-78408 to this package, but the
+#                    0.37.0-v14 build's Trivy scan shows it's actually a
+#                    util-linux/nsenter advisory -- see the note further
+#                    down near the util-linux version check. Removing
+#                    liblastlog2-2 doesn't clear it.)
 #
 # Headroom imports sqlite3 on the `mcp serve` path (compression cache store,
 # memory store, and Codex thread recovery), so SQLite cannot simply disappear.
@@ -502,15 +507,18 @@ RUN find /usr/local/lib/python${PYTHON_ABI} /opt/venv \
 # Tracked as an open, currently unfixable finding -- re-scan on the next
 # rebuild to pick up a Debian security update once one ships.
 #
-# CVE-2026-76642 (mount, CWE-390) fixes at util-linux 2.41.5. util-linux is
-# not pinned by this Dockerfile, so it floats to whatever trixie mirrors at
-# build time; the assertion after this block fails the build loudly instead
-# of silently shipping an older snapshot. CVE-2026-78409 (mount, CWE-59) has
-# no util-linux fix version -- Xray's "6.15" reads as a required Linux kernel
-# baseline for the underlying symlink-race protection, which this image
-# cannot supply: the kernel comes from the host the container runs on, not
-# from anything built here. Tracked as a deployment-host blocker, not an
-# image-build one.
+# Correction (2026-09-18, post-publish): the 0.37.0-v14 build's own Trivy scan
+# shows util-linux 1:2.41.5-0+deb13u1 -- meeting the floor below -- still
+# "affected" with no Fixed Version for CVE-2026-76642, CVE-2026-78408,
+# CVE-2026-78409, and CVE-2026-78410 (bsdutils, mount, libblkid1, libmount1,
+# and siblings from the same source package). Xray's "2.41.5" and "6.15"
+# fix-version hints do not hold up against Debian's real advisory status:
+# none of these four are fixed in trixie yet, not just CVE-2026-78409. The
+# assertion below is kept as a floor/regression guard (fail the build if a
+# future rebuild somehow lands on an older util-linux than this scan already
+# covered), not as proof of remediation. All four are open, upstream/Debian
+# findings with no fix to apply from this image build; re-scan each rebuild
+# to pick up a Debian security update once one ships.
 RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import importlib.util, ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
      assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; \
