@@ -1,14 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
-ARG HEADROOM_VERSION=0.37.0
-ARG HEADROOM_COMMIT=32d7ca4577d599b8a5f811ada74cf31504302c9d
+ARG HEADROOM_VERSION=0.38.0
+ARG HEADROOM_COMMIT=94206e265203acfd72a3b939e9a964e29175ad50
 ARG PYTHON_VERSION=3.13.15
 ARG PYTHON_ABI=3.13
 ARG DEBIAN_SUITE=trixie
 ARG GLIBC_DEBIAN_VERSION=2.41-12+deb13u4
 ARG GLIBC_BACKPORT_VERSION=2.41-12+deb13u4+rcamarda1
 ARG PIP_VERSION=26.2.1
-ARG LITELLM_VERSION=1.96.2
 ARG PYJWT_VERSION=2.14.0
 ARG TOKENIZERS_VERSION=0.23.2
 ARG TRANSFORMERS_VERSION=5.17.0
@@ -80,7 +79,6 @@ FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder
 ARG HEADROOM_VERSION
 ARG PYTHON_VERSION
 ARG PIP_VERSION
-ARG LITELLM_VERSION
 ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
@@ -189,15 +187,6 @@ RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
 RUN uv pip install --python /opt/venv/bin/python --upgrade-package anyio \
       "anyio==${ANYIO_VERSION}" \
     && test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("anyio"))')" = "$ANYIO_VERSION"
-# Xray XRAY-1062440 reports Headroom 0.37.0's locked LiteLLM 1.88.1 and fixes
-# it in 1.96.2. Keep the immutable upstream lock for every other dependency,
-# then make this single, explicit downstream security override. uv mutates the
-# existing venv without installing pip or setuptools. Remove this carry when a
-# future Headroom release locks LiteLLM >= 1.96.2.
-RUN uv pip install --python /opt/venv/bin/python --upgrade-package litellm \
-      "litellm==${LITELLM_VERSION}" \
-    && test "$(PATH="/opt/venv/bin:${PATH}" python -c 'import importlib.metadata; print(importlib.metadata.version("litellm"))')" = "$LITELLM_VERSION" \
-    && ! PATH="/opt/venv/bin:${PATH}" python -c "import pip" 2>/dev/null
 # Xray reports these high/critical PyJWT advisories against the upstream lock's
 # 2.13.0 release: XRAY-1076251 (CVSS 9.1, CWE-347), XRAY-1076205,
 # XRAY-1076201, XRAY-1076198, XRAY-1076197, XRAY-1076195, and XRAY-1076185
@@ -338,7 +327,6 @@ EOF
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime_rootfs
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
-ARG LITELLM_VERSION
 ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
@@ -563,7 +551,6 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && PATH="/opt/venv/bin:${PATH}" python -c \
     "import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers, urllib3; \
      assert importlib.metadata.version('anyio') == '${ANYIO_VERSION}'; \
-     assert importlib.metadata.version('litellm') == '${LITELLM_VERSION}'; \
      assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
      assert tokenizers.__version__ == '${TOKENIZERS_VERSION}'; \
      assert transformers.__version__ == '${TRANSFORMERS_VERSION}'; \
