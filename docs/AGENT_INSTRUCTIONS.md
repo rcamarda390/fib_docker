@@ -35,6 +35,15 @@ Before changing anything:
 
 Do not assume all images use identical build, scan, smoke-test, or revision behavior. Read the actual caller workflow first.
 
+## GitHub access
+
+For work in `github.com/rcamarda390`, use the configured ChatGPT Work **GitHub plugin** as the primary repository interface.
+
+- Use it to inspect repositories, files, branches, pull requests, Actions, issues, and reviews.
+- Use its branch, file-update, commit, pull-request, and workflow controls for repository changes and builds.
+- Do not substitute unauthenticated Git CLI access or browser editing when the plugin is available.
+- If the plugin is unavailable, disconnected, or lacks a required capability, report that specific blocker before using another access method.
+
 ## Branch and pull request rules
 
 Do not make feature or remediation changes directly on `main`.
