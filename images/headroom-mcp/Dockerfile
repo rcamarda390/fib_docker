@@ -577,9 +577,11 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u2' \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' util-linux)" ge '2.41.5' \
  && dpkg-query -W libc6 libc-bin libssl3t64 util-linux \
- && ! dpkg-query -W libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl \
-      tar libudev1 libsystemd0 liblastlog2-2 apt libapt-pkg7.0 diffutils \
-      login passwd login.defs 2>/dev/null \
+ && for package in \
+      libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl tar libudev1 \
+      libsystemd0 liblastlog2-2 apt libapt-pkg7.0 diffutils login passwd login.defs; do \
+      ! dpkg-query -W "$package" 2>/dev/null; \
+    done \
  && getent passwd headroom >/dev/null \
  && ! command -v perl \
  && ! command -v gzip \
