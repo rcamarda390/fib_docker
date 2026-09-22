@@ -377,7 +377,7 @@ RUN apt-get update \
     && rm -rf /tmp/glibc \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/headroom \
-      --shell /usr/sbin/nologin headroom \
+      --shell /bin/false headroom \
     && mkdir -p /home/headroom/.headroom \
     && chown -R headroom:headroom /home/headroom
 # Remove the base interpreter's pip instead of upgrading it. Nothing in this
@@ -456,6 +456,16 @@ RUN dpkg --purge --force-depends --force-remove-essential perl-base \
 #   diffutils       CVE-2026-53910 -- Headroom parses and compresses diffs in
 #                    Python/Rust; it never invokes diff, diff3, or cmp. Debian
 #                    has no packaged fix, so do not retain an unused toolset.
+#   login, passwd, login.defs
+#                    CVE-2026-3184, CVE-2026-76642, CVE-2026-78408,
+#                    CVE-2026-78409, CVE-2026-78410, CVE-2024-56433, and
+#                    CVE-2007-5686 -- these are interactive-login and account
+#                    administration tools. `useradd` is needed only above to
+#                    create the fixed service account. Docker starts the
+#                    entrypoint as that existing account; Headroom's proxy does
+#                    not authenticate through PAM or invoke login, passwd,
+#                    useradd, groupadd, chage, or nologin. Keep /bin/false as
+#                    the account shell before purging login's nologin binary.
 #   liblastlog2-2   CVE-2022-0563 -- records PAM login history; already
 #                    unreachable now that the libpam-* packages above are
 #                    gone, since nothing in the image performs an
@@ -505,6 +515,7 @@ RUN ldconfig \
       libsqlite3-0 zlib1g openssl \
       tar libudev1 libsystemd0 liblastlog2-2 \
       apt libapt-pkg7.0 diffutils \
+      login passwd login.defs \
  && rm -rf /usr/share/debconf
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/headroom-cache /opt/headroom-cache
@@ -566,13 +577,23 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u2' \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' util-linux)" ge '2.41.5' \
  && dpkg-query -W libc6 libc-bin libssl3t64 util-linux \
- && ! dpkg-query -W libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl \
-      tar libudev1 libsystemd0 liblastlog2-2 apt libapt-pkg7.0 diffutils 2>/dev/null \
+ && for package in \
+      libsqlite3-0 zlib1g libpam-modules-bin libncursesw6 openssl tar libudev1 \
+      libsystemd0 liblastlog2-2 apt libapt-pkg7.0 diffutils login passwd login.defs; do \
+      ! dpkg-query -W "$package" 2>/dev/null; \
+    done \
+ && getent passwd headroom >/dev/null \
  && ! command -v perl \
  && ! command -v gzip \
  && ! command -v tar \
  && ! command -v apt \
  && ! command -v diff \
+ && ! command -v login \
+ && ! command -v passwd \
+ && ! command -v useradd \
+ && ! command -v groupadd \
+ && ! command -v chage \
+ && ! command -v nologin \
  && ! command -v tput \
  && ! command -v openssl \
  && ! command -v pip \
