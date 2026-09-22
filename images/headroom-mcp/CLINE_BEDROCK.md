@@ -1,11 +1,11 @@
-# Cline 4.0.12 → Headroom 0.37.0 → AWS Bedrock
+# Cline 4.0.12 → Headroom 0.38.0 → AWS Bedrock
 
-This image carries a downstream Headroom 0.37.0 compatibility patch for Cline's
+This image carries a downstream Headroom 0.38.0 compatibility patch for Cline's
 OpenAI-compatible transport to AWS Bedrock.
 
 ## Request shaping
 
-Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.37.0 treats unknown
+Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.38.0 treats unknown
 OpenAI request keys as `extra_body`, and LiteLLM consequently forwards this key
 toward Bedrock, which rejects it. The downstream patch removes only
 `parallel_tool_calls` from `extra_body` when the configured Headroom provider is
@@ -54,7 +54,7 @@ cache savings for request failures.
 
 ## Completion-token compatibility
 
-Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.37.0's
+Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.38.0's
 OpenAI allowlist omits the translated name, so it otherwise places the field in
 `extra_body` and Bedrock rejects it. The downstream patch adds
 `max_completion_tokens` to Headroom's standard OpenAI parameter tuple so it is
@@ -68,7 +68,7 @@ The image enables Headroom's output shaper with:
 HEADROOM_OUTPUT_SHAPER=1
 ```
 
-Headroom 0.37.0 reads this setting live on each proxy request. No fixed
+Headroom 0.38.0 reads this setting live on each proxy request. No fixed
 `HEADROOM_VERBOSITY_LEVEL` is set.
 
 `headroom learn --verbosity --apply` remains a deployment-time operation because
@@ -76,7 +76,7 @@ it depends on agent session history.
 
 ## Health check in the air-gapped deployment
 
-The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.37.0's
+The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.38.0's
 external upstream readiness probe in the air-gapped Bedrock deployment. This
 does not weaken TLS verification for Bedrock traffic.
 
@@ -86,9 +86,9 @@ The patch is applied inside the main `Dockerfile` builder stage, directly to the
 venv produced from the pinned upstream source. One action now produces the
 finished image; there is no intermediate base image or second carry build.
 
-The patch script expects exactly two Headroom 0.37.0 OpenAI call sites and fails
-the build if the upstream source shape changes. Both are present and
-byte-identical at `v0.37.0`. The build compiles the patched module and runs the
+The patch script expects exactly two Headroom 0.38.0 OpenAI call sites and fails
+the build if the upstream source shape changes. Both are present at `v0.38.0`; the checked
+anchor verification and regression suite pass. The build compiles the patched module and runs the
 regression suite before copying the venv into the runtime image.
 
 The patch and regression scripts remain in the builder stage. Only the patched
