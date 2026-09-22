@@ -1,11 +1,11 @@
-# Cline 4.0.12 → Headroom 0.37.0 → AWS Bedrock
+# Cline 4.0.12 → Headroom 0.38.0 → AWS Bedrock
 
-This image carries a downstream Headroom 0.37.0 compatibility patch for Cline's
+This image carries a downstream Headroom 0.38.0 compatibility patch for Cline's
 OpenAI-compatible transport to AWS Bedrock.
 
 ## Request shaping
 
-Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.37.0 treats unknown
+Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.38.0 treats unknown
 OpenAI request keys as `extra_body`, and LiteLLM consequently forwards this key
 toward Bedrock, which rejects it. The downstream patch removes only
 `parallel_tool_calls` from `extra_body` when the configured Headroom provider is
@@ -18,9 +18,10 @@ Both `send_openai_message()` and `stream_openai_message()` are patched.
 Cline's OpenAI-compatible path does not emit Bedrock cache markers. The
 downstream hotfix enables prompt caching only when LiteLLM's
 `supports_prompt_caching()` reports that the exact Bedrock model supports it.
-`get_supported_openai_params()` cannot be used for this gate because LiteLLM
-1.96.2 does not include `cache_control` in that list for caching-capable Bedrock
-models.
+`get_supported_openai_params()` is not used as the gate: it lists request
+parameters, not the model's prompt-caching capability. In the verified LiteLLM
+1.101.0 runtime it lists `cache_control` for the tested Bedrock model IDs, while
+`supports_prompt_caching()` remains the dedicated per-model capability check.
 
 For supported models, the patch adds:
 
@@ -29,32 +30,29 @@ For supported models, the patch adds:
 ```
 
 to the stable system message (or the last block of list-form system content).
-LiteLLM 1.96.2 natively converts that message-level marker into a Bedrock
+LiteLLM 1.101.0 natively converts that message-level marker into a Bedrock
 Converse `cachePoint`.
 
 For models that do not report `cache_control` support, no marker is added and
 the request proceeds normally with prompt caching effectively off.
 
-The previous `cache_control_injection_points` approach was removed. In the
-Headroom/LiteLLM 1.96.2 path it could reach Bedrock as a raw Converse request
-field, producing:
-
-```text
-cache_control_injection_points: Extra inputs are not permitted
-```
+The previous `cache_control_injection_points` approach remains intentionally
+unused. LiteLLM 1.101.0 recognizes that field only for `tool_config` and can
+append a tool cache point; this image uses the tested system-message path only.
 
 Dynamic user and assistant turns are not automatically marked. The system
 prefix is the highest-value stable region for Cline and avoids moving cache
 breakpoints as the conversation grows.
 
-Tool-config caching is intentionally not injected by this patch because the
-installed LiteLLM 1.96.2 path has a verified native system-message conversion,
-but no equally reliable tool-config marker path was found. This avoids trading
-cache savings for request failures.
+Tool-config caching is intentionally not injected by this patch. LiteLLM
+1.101.0 supports a `tool_config` marker through
+`cache_control_injection_points`, but this carry has validated only the native
+system-message conversion and intentionally avoids changing tool payload
+behavior.
 
 ## Completion-token compatibility
 
-Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.37.0's
+Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.38.0's
 OpenAI allowlist omits the translated name, so it otherwise places the field in
 `extra_body` and Bedrock rejects it. The downstream patch adds
 `max_completion_tokens` to Headroom's standard OpenAI parameter tuple so it is
@@ -68,7 +66,7 @@ The image enables Headroom's output shaper with:
 HEADROOM_OUTPUT_SHAPER=1
 ```
 
-Headroom 0.37.0 reads this setting live on each proxy request. No fixed
+Headroom 0.38.0 reads this setting live on each proxy request. No fixed
 `HEADROOM_VERBOSITY_LEVEL` is set.
 
 `headroom learn --verbosity --apply` remains a deployment-time operation because
@@ -76,7 +74,7 @@ it depends on agent session history.
 
 ## Health check in the air-gapped deployment
 
-The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.37.0's
+The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.38.0's
 external upstream readiness probe in the air-gapped Bedrock deployment. This
 does not weaken TLS verification for Bedrock traffic.
 
@@ -86,9 +84,9 @@ The patch is applied inside the main `Dockerfile` builder stage, directly to the
 venv produced from the pinned upstream source. One action now produces the
 finished image; there is no intermediate base image or second carry build.
 
-The patch script expects exactly two Headroom 0.37.0 OpenAI call sites and fails
-the build if the upstream source shape changes. Both are present and
-byte-identical at `v0.37.0`. The build compiles the patched module and runs the
+The patch script expects exactly two Headroom 0.38.0 OpenAI call sites and fails
+the build if the upstream source shape changes. Both are present at `v0.38.0`; the checked
+anchor verification and regression suite pass. The build compiles the patched module and runs the
 regression suite before copying the venv into the runtime image.
 
 The patch and regression scripts remain in the builder stage. Only the patched
