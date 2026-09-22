@@ -539,6 +539,9 @@ RUN find /usr/local/lib/python${PYTHON_ABI} /opt/venv \
 # covered), not as proof of remediation. All four are open, upstream/Debian
 # findings with no fix to apply from this image build; re-scan each rebuild
 # to pick up a Debian security update once one ships.
+# Headroom 0.38.0's locked resolution supplies LiteLLM 1.101.0. The image
+# deliberately relies on that upstream resolution rather than downgrading it,
+# but this final-runtime check keeps XRAY-1062440's fixed floor fail-closed.
 RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import importlib.util, ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
      assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; \
@@ -549,13 +552,15 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
      ssl.create_default_context(); \
      print(f'Verification: Python stdlib (SQLite {sqlite3.sqlite_version}, FTS5, ssl, compression) OK')" \
  && PATH="/opt/venv/bin:${PATH}" python -c \
-    "import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers, urllib3; \
+    "from packaging.version import Version; import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers, urllib3; \
+     litellm_version = importlib.metadata.version('litellm'); \
+     assert Version(litellm_version) >= Version('1.96.2'), litellm_version; \
      assert importlib.metadata.version('anyio') == '${ANYIO_VERSION}'; \
      assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
      assert tokenizers.__version__ == '${TOKENIZERS_VERSION}'; \
      assert transformers.__version__ == '${TRANSFORMERS_VERSION}'; \
      assert importlib.metadata.version('urllib3') == '${URLLIB3_VERSION}'; \
-     print(f'Verification: LiteLLM {importlib.metadata.version(\"litellm\")}, PyJWT {importlib.metadata.version(\"PyJWT\")}, Tokenizers {tokenizers.__version__}, Transformers {transformers.__version__}, urllib3 {urllib3.__version__}; AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
+     print(f'Verification: LiteLLM {litellm_version}, PyJWT {importlib.metadata.version(\"PyJWT\")}, Tokenizers {tokenizers.__version__}, Transformers {transformers.__version__}, urllib3 {urllib3.__version__}; AWS dependencies (boto3 {boto3.__version__}, botocore {botocore.__version__}) OK')" \
  && { PATH="/opt/venv/bin:${PATH}" python -c \
     "import awscrt; print(f'  awscrt {awscrt.__version__} also available')" || true; } \
  && /bin/dash -c "echo 'Verification: dash entrypoint shell OK'" \
