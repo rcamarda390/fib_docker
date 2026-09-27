@@ -513,8 +513,147 @@ jobs:
         run: |
           {
             if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_GHCR" = "true" -o "$PUBLISH_DOCKERHUB" = "true" ]; then
-              echo "## MCP image published"
-              echo "The build completed and pushed these exact image references:"
+              printf '%s\n' '## MCP image published'
+              printf '%s\n' 'The build completed and pushed these exact image references:'
               if [ "$PUBLISH_GHCR" = "true" ]; then
-                echo "- GHCR: \`$GHCR_IMAGE\`"
+                printf -- '- GHCR: %s\n' "$GHCR_IMAGE"
               fi
+              if [ "$PUBLISH_DOCKERHUB" = "true" ]; then
+                printf -- '- Docker Hub: %s\n' "$DOCKERHUB_IMAGE"
+              fi
+            else
+              printf '%s\n' '## MCP image candidate validated (not published)'
+              printf '%s\n' 'No registry push was performed.'
+            fi
+            printf -- '- Current upstream version: %s\n' "$UPSTREAM_VERSION"
+            printf -- '- Versioned tag: %s\n' "$IMAGE_TAG"
+            if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_GHCR" = "true" ]; then
+              printf '\n### Pull from GHCR\n```sh\ndocker pull %s\n```\n' "$GHCR_IMAGE"
+            fi
+            if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_DOCKERHUB" = "true" ]; then
+              printf '\n### Pull from Docker Hub\n```sh\ndocker pull %s\n```\n' "$DOCKERHUB_IMAGE"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Current upstream version: $UPSTREAM_VERSION"
+          echo "MCP image versioned tag: $IMAGE_TAG"
+          if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_GHCR" = "true" ]; then
+            echo "Pushed to GHCR: $GHCR_IMAGE"
+            echo "Pull from GHCR: docker pull $GHCR_IMAGE"
+          fi
+          if [ "$PUBLISH" = "true" ] && [ "$PUBLISH_DOCKERHUB" = "true" ]; then
+            echo "Pushed to Docker Hub: $DOCKERHUB_IMAGE"
+            echo "Pull from Docker Hub: docker pull $DOCKERHUB_IMAGE"
+          fi
+
+      # `main` requires changes to go through a pull request, so the bump cannot
+      # be pushed to it directly: the previous `git push origin HEAD:main` was
+      # rejected by the ruleset and failed the whole build at step 3, before it
+      # ever built, smoke-tested or scanned. The bump is therefore proposed as
+      # its own PR. It runs last and only on success, so a bump is never
+      # proposed for an image that failed to publish.
+      #
+      # The head branch is stable per image and force-pushed, so repeated builds
+      # refresh a single open PR instead of piling up one per run. It is written
+      # only by this step, and carries a single deterministic line change, so the
+      # force-push can only ever replace a superseded bump with the current one.
+      #
+      # Known caveat: the counter advances only when that PR merges. A build
+      # that starts while the bump is still open recomputes the same revision
+      # from the base branch and republishes the same tag. Merging the bump PR
+      # promptly -- or enabling auto-merge on it -- keeps the counter honest.
+      - name: Open a PR with the incremented revision
+        if: ${{ success() && steps.revision.outcome == 'success' }}
+        env:
+          CONFIG: ${{ inputs.config }}
+          BASE: ${{ github.ref_name }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          NEXT_REVISION: ${{ steps.revision.outputs.next_revision }}
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          REPO: ${{ github.repository }}
+          # GITHUB_TOKEN is subject to the "Allow GitHub Actions to create and
+          # approve pull requests" setting, which refused three consecutive runs
+          # with `GitHub Actions is not permitted to create or approve pull
+          # requests (createPullRequest)` even after the repo checkbox was
+          # believed to be on. A fine-grained PAT (contents + pull-requests:
+          # write) is not subject to it. Falls back to the built-in token when
+          # the secret is absent, so repos that do have the setting enabled keep
+          # working with no secret to manage.
+          #
+          # Safe against recursion: no workflow here triggers `on: pull_request`,
+          # so the PR this opens starts nothing, even though PAT-authored PRs --
+          # unlike GITHUB_TOKEN ones -- are allowed to trigger workflows.
+          GH_TOKEN: ${{ secrets.REVISION_PR_TOKEN || secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "$CONFIG"; then
+            echo "Revision file is unchanged; nothing to propose."
+            exit 0
+          fi
+
+          head_branch="ci/increment-revision-${IMAGE_NAME}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$head_branch"
+          git add "$CONFIG"
+          git commit \
+            -m "chore: increment ${IMAGE_NAME} image revision to ${NEXT_REVISION} [skip ci]" \
+            -m "Published as ${IMAGE_TAG}." \
+            -m "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
+          git push --force origin "$head_branch"
+
+          # Checked explicitly rather than tolerating a failed `gh pr create`:
+          # swallowing the error would also swallow a 403 from the "Allow GitHub
+          # Actions to create and approve pull requests" setting being off, and
+          # the revision would then silently never advance.
+          existing=$(gh pr list --repo "$REPO" --head "$head_branch" --base "$BASE" \
+            --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Refreshed existing revision PR #${existing}"
+            echo "Revision bump updated on PR #${existing}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            printf '## Automated image revision bump\n\n'
+            printf 'This build published `%s`, so `%s` is bumped to `revision: %s`\n' "$IMAGE_TAG" "$CONFIG" "$NEXT_REVISION"
+            printf 'to stop the next build reusing that tag.\n\n'
+            printf -- '- Image: `%s`\n' "$IMAGE_NAME"
+            printf -- '- Published tag: `%s`\n' "$IMAGE_TAG"
+            printf -- '- Config: `%s`\n\n' "$CONFIG"
+            printf '`%s` requires changes to go through a pull request, so CI proposes the\n' "$BASE"
+            printf 'bump here instead of pushing it directly.\n\n'
+            printf '> **Merge this promptly.** Until it lands, the next build recomputes the\n'
+            printf '> same revision from `%s` and republishes the same tag.\n' "$BASE"
+          } > /tmp/revision_pr_body.md
+
+          # Still fatal -- a bump that never lands means the next build reuses
+          # the tag -- but the summary now says exactly what to do, so the run
+          # page alone is enough to diagnose and recover from it.
+          if pr_url=$(gh pr create \
+            --repo "$REPO" \
+            --base "$BASE" \
+            --head "$head_branch" \
+            --title "chore: increment ${IMAGE_NAME} image revision to ${NEXT_REVISION} [skip ci]" \
+            --body-file /tmp/revision_pr_body.md 2>/tmp/revision_pr_err); then
+            echo "Opened revision PR: ${pr_url}"
+            echo "Revision bump proposed: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          err=$(cat /tmp/revision_pr_err)
+          echo "::error::Could not open the revision PR: ${err}"
+          {
+            printf '## Revision bump PR could not be opened\n\n'
+            printf 'The image published fine as `%s`. Only the bookkeeping PR failed.\n\n' "$IMAGE_TAG"
+            printf 'Branch `%s` is pushed and carries the bump to `revision: %s`:\n\n' "$head_branch" "$NEXT_REVISION"
+            printf -- '- **[Open the PR](https://github.com/%s/compare/%s...%s?expand=1)**\n\n' "$REPO" "$BASE" "$head_branch"
+            printf '```\n%s\n```\n\n' "$err"
+            printf 'If that says Actions is not permitted to create pull requests, either set a\n'
+            printf '`REVISION_PR_TOKEN` secret (fine-grained PAT with contents + pull-requests\n'
+            printf 'write), or enable Settings -> Actions -> General -> Workflow permissions ->\n'
+            printf '"Allow GitHub Actions to create and approve pull requests" -- note that is a\n'
+            printf 'separate checkbox from the read/write radio above it, and an account-level\n'
+            printf 'setting at github.com/settings/actions can override the repo one.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
