@@ -349,7 +349,9 @@ Temporary Headroom edits proven in a running container must be folded back into 
 - Validate with offline environment settings.
 - Preserve persistent `/data` behavior.
 - Keep its blocking security scan as an actual release gate when configured.
-- Revalidate the Streamable HTTP / REST lifespan patch on upstream upgrades.
+- Revalidate upstream Streamable HTTP / REST lifespan handling on every Gnosis
+  upgrade. Keep a local patch only if the selected upstream release regresses
+  the combined lifespan behavior.
 
 ### Atlassian MCP — `images/atlassian-mcp/`
 

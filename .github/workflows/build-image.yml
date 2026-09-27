@@ -36,6 +36,11 @@ on:
         required: false
         default: ""
         type: string
+      # Override the image entrypoint for smoke commands that need a shell or another executable.
+      smoke_entrypoint:
+        required: false
+        default: ""
+        type: string
       smoke_env:
         required: false
         default: ""
@@ -394,15 +399,20 @@ jobs:
           SMOKE_ENV: ${{ inputs.smoke_env }}
           SMOKE_NETWORK_DISABLED: ${{ inputs.smoke_network_disabled }}
           SMOKE_COMMAND: ${{ inputs.smoke_command }}
+          SMOKE_ENTRYPOINT: ${{ inputs.smoke_entrypoint }}
           SMOKE_TIMEOUT: ${{ inputs.smoke_timeout }}
         run: |
           set -euo pipefail
           IFS=',' read -r -a SMOKE_ARGS <<< "$SMOKE_COMMAND"
+          entrypoint_args=()
+          if [ -n "$SMOKE_ENTRYPOINT" ]; then
+            entrypoint_args+=(--entrypoint "$SMOKE_ENTRYPOINT")
+          fi
           network_args=()
           if [ "$SMOKE_NETWORK_DISABLED" = "true" ]; then
             network_args+=(--network none)
           fi
-          timeout "$SMOKE_TIMEOUT" docker run --rm "${network_args[@]}" $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
+          timeout "$SMOKE_TIMEOUT" docker run --rm "${network_args[@]}" "${entrypoint_args[@]}" $SMOKE_ENV "$IMAGE" "${SMOKE_ARGS[@]}"
 
       - name: Run health smoke test
         if: inputs.smoke_healthcheck
@@ -448,6 +458,7 @@ jobs:
       # Trivy report "unable to find the specified image", which buried the real
       # build error under a misleading scanner failure.
       - name: Scan candidate image with Trivy
+        id: scan
         if: ${{ !cancelled() && inputs.scan && steps.smoke_build.outcome == 'success' }}
         continue-on-error: ${{ !inputs.block_on_scan_failure }}
         uses: aquasecurity/trivy-action@v0.36.0
@@ -458,6 +469,14 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: "1"
+
+      # Preserve blocking scan failures even when the action masks its own
+      # non-zero result under continue-on-error.
+      - name: Enforce blocking scan result
+        if: ${{ inputs.scan && inputs.block_on_scan_failure && steps.scan.outcome != 'success' }}
+        run: |
+          echo "::error::Blocking Trivy scan failed; refusing registry publication."
+          exit 1
 
       - name: Log in to GHCR
         if: inputs.publish && inputs.publish_ghcr
