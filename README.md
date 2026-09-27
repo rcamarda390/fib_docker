@@ -31,7 +31,7 @@ The live `main` branch contains image targets under `images/`:
 | `images/agentmemory-server/` | `agentmemory` | 0.9.29 | 1 | Self-contained AgentMemory server; builds with iii engine 0.11.2 |
 | `images/atlassian-mcp/` | `atlassian-mcp` | 0.23.0 | 12 | Atlassian MCP image |
 | `images/bifrost-mcp/` | `bifrost-mcp` | 1.6.11 | 9 | Bifrost gateway image pinned to a specific upstream commit |
-| `images/gnosis-mcp/` | `gnosis-mcp` | 0.14.1 | 1 | Air-gap Gnosis documentation MCP server with local embeddings |
+| `images/gnosis-mcp/` | `gnosis-mcp` | 0.17.5 | 11 | Air-gap Gnosis documentation MCP server with local embeddings |
 | `images/headroom-mcp/` | `headroom-mcp` | 0.38.0 | 1 | Headroom proxy/MCP image with Bedrock-oriented variants |
 | `images/litellm/` | `litellm` | 1.94.3 | 1 | LiteLLM AI Gateway built from a pinned upstream commit |
 | `images/sooperset-mcp-atlassian/` | `sooperset-mcp-atlassian` | 1.0.0 | 9 | Sooperset Atlassian MCP image |
@@ -195,8 +195,8 @@ Current manifest:
 
 ```yaml
 name: gnosis-mcp
-upstream_version: 0.14.1
-revision: 1
+upstream_version: 0.17.5
+revision: 11
 build_args:
   EMBED_MODEL: "MongoDB/mdbr-leaf-ir"
   EXTRAS: "embeddings"
@@ -240,15 +240,13 @@ and the image exposes port:
 
 The runtime runs as the non-root `gnosis` user.
 
-### Gnosis Streamable HTTP patch
+### Gnosis Streamable HTTP support
 
-The image contains:
-
-```text
-images/gnosis-mcp/patch_rest.py
-```
-
-The patch addresses Gnosis REST/StreamableHTTP lifespan handling so the MCP session manager is initialized when the REST API and Streamable HTTP transport are mounted together.
+Gnosis 0.17.5 includes the REST/StreamableHTTP lifespan handling required to
+initialize the MCP session manager when both transports are mounted together.
+The image therefore no longer carries a local `rest.py` patch; the build still
+verifies the resulting runtime and exercises the combined transport through
+the image smoke test.
 
 The image starts Gnosis with:
 

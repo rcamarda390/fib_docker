@@ -2,10 +2,9 @@
 # =============================================================================
 # gnosis-mcp — air-gap variant
 # =============================================================================
-# Patch: gnosis-mcp 0.14.0 rest.py does not wire session_manager.run() into
-# the Starlette lifespan when mounting StreamableHTTP alongside REST API.
-# This causes RuntimeError: Task group is not initialized on every /mcp request.
-# Fix: inject a combined lifespan that runs both REST backend AND session_manager.
+# Upstream 0.17.5 includes the combined REST/MCP lifespan required when
+# mounting StreamableHTTP alongside the REST API. Earlier image revisions
+# injected that fix with patch_rest.py; the local patch is no longer needed.
 # Security: Python 3.13 on Debian Trixie plus checksum-pinned glibc, SQLite,
 # and zlib fixes. Packages that are not required by the service are removed
 # from the final filesystem. See SECURITY-v17.md for the finding disposition.
@@ -124,7 +123,7 @@ RUN curl -fsSL "https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz" -o /tmp/zlib.tar.g
 
 WORKDIR /build
 
-ARG GNOSIS_VERSION=0.14.1
+ARG GNOSIS_VERSION=0.17.5
 ARG EXTRAS="embeddings"
 COPY requirements.lock /build/requirements.lock
 # gnosis-mcp is locked to its PyPI release, so the extras are resolved away and
@@ -137,11 +136,6 @@ RUN test "$EXTRAS" = "embeddings" \
     && pip install --require-hashes --prefix=/install -r /build/requirements.lock \
     && SITE_PACKAGES="$(find /install/lib -type d -name site-packages -print -quit)" \
     && test "$(PYTHONPATH="$SITE_PACKAGES" python -c 'import importlib.metadata; print(importlib.metadata.version("gnosis-mcp"))')" = "$GNOSIS_VERSION"
-
-# Patch rest.py — replace the single-lifespan Starlette construction with a
-# combined lifespan that also runs session_manager for StreamableHTTP.
-COPY patch_rest.py /build/patch_rest.py
-RUN python3 /build/patch_rest.py
 
 # Download exactly the files local_embed.py needs.
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
@@ -348,7 +342,7 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % __import__('os').environ['GNOSIS_MCP_PORT'])" || exit 1
 
-ARG GNOSIS_VERSION=0.14.1
+ARG GNOSIS_VERSION=0.17.5
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
 LABEL org.opencontainers.image.title="gnosis-mcp" \
       org.opencontainers.image.description="Self-hosted MCP docs server — air-gap variant, ONNX model pre-bundled." \
@@ -357,7 +351,7 @@ LABEL org.opencontainers.image.title="gnosis-mcp" \
       gnosis.airgap="true" \
       gnosis.embed-model="${EMBED_MODEL}" \
       gnosis.gnosis-version="${GNOSIS_VERSION}" \
-      gnosis.patch="rest.py-combined-lifespan" \
+      gnosis.patch="upstream-rest-combined-lifespan" \
       gnosis.image-version="v11"
 
 ENTRYPOINT ["gnosis-mcp"]
