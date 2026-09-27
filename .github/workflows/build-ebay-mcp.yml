@@ -6,7 +6,6 @@ on:
     paths:
       - "images/ebay-mcp/**"
       - ".github/workflows/build-ebay-mcp.yml"
-      - ".github/workflows/build-image.yml"
 
 concurrency:
   group: ebay-mcp-publish
