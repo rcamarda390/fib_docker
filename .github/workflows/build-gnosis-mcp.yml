@@ -33,6 +33,7 @@ jobs:
       dockerfile: ./images/gnosis-mcp/Dockerfile
       config: images/gnosis-mcp/image.yaml
       version_arg: GNOSIS_VERSION
+      revision_arg: GNOSIS_IMAGE_VERSION
       platforms: linux/amd64
       smoke_env: -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1
       smoke_entrypoint: /bin/sh
