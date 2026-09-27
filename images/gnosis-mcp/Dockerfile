@@ -344,6 +344,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 
 ARG GNOSIS_VERSION=0.17.5
 ARG EMBED_MODEL="MongoDB/mdbr-leaf-ir"
+# Supplied by the reusable workflow as the revision in the immutable image tag.
+ARG GNOSIS_IMAGE_VERSION
 LABEL org.opencontainers.image.title="gnosis-mcp" \
       org.opencontainers.image.description="Self-hosted MCP docs server — air-gap variant, ONNX model pre-bundled." \
       org.opencontainers.image.source="https://github.com/nicholasglazer/gnosis-mcp" \
@@ -352,7 +354,7 @@ LABEL org.opencontainers.image.title="gnosis-mcp" \
       gnosis.embed-model="${EMBED_MODEL}" \
       gnosis.gnosis-version="${GNOSIS_VERSION}" \
       gnosis.patch="upstream-rest-combined-lifespan" \
-      gnosis.image-version="v11"
+      gnosis.image-version="${GNOSIS_IMAGE_VERSION}"
 
 ENTRYPOINT ["gnosis-mcp"]
 CMD ["serve", "--transport", "streamable-http", "--rest"]
