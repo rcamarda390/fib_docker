@@ -273,7 +273,7 @@ RUN rm -f \
         libudev1 libsystemd0 \
         ncurses-bin ncurses-base libncursesw6 readline-common libreadline8t64 \
         libpam-modules-bin libpam-modules libpam-runtime libpam0g libsqlite3-0 \
-        perl-base login login.defs passwd \
+        liblastlog2-2 perl-base login login.defs passwd \
     && rm -rf /usr/share/debconf /var/cache/apt /var/lib/apt/lists \
     && purge_status=0 \
     && { dpkg --purge --no-triggers --force-depends --force-remove-essential --force-remove-protected \
@@ -306,7 +306,7 @@ RUN ! command -v pip \
     && for package in \
         apt libapt-pkg7.0 bash bsdutils coreutils diffutils gzip sed tar \
         libacl1 libattr1 libbz2-1.0 libc-bin libmount1 libncursesw6 libsystemd0 \
-        libudev1 libuuid1 login.defs ncurses-base util-linux zlib1g \
+        libudev1 libuuid1 liblastlog2-2 login.defs ncurses-base util-linux zlib1g \
         libpam0g libpam-modules libpam-modules-bin libpam-runtime libsqlite3-0 perl-base; do \
         package_state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"; \
         test "$package_state" != "installed" || { echo "$package is still installed" >&2; exit 1; }; \
