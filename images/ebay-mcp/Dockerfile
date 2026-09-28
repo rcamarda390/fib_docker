@@ -25,7 +25,10 @@ RUN set -eux; \
     test "$(git rev-parse HEAD)" = "${EBAY_MCP_COMMIT}"; \
     test "$(node -p "require('./package.json').version")" = "${EBAY_MCP_VERSION}"
 
-RUN pnpm install --frozen-lockfile --ignore-scripts \
+# Keep vulnerable transitive runtime dependencies above their fixed versions. These exact
+# overrides are applied to the pinned upstream lockfile before installation.
+RUN node -e "const fs=require('fs'); const p=require('./package.json'); p.pnpm=p.pnpm||{}; p.pnpm.overrides={...(p.pnpm.overrides||{}),'fast-uri':'3.1.6','ip-address':'10.3.1','brace-expansion@2':'2.1.4'}; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\\n')" \
+    && pnpm install --no-frozen-lockfile --ignore-scripts \
     && pnpm run build \
     && pnpm prune --prod --ignore-scripts
 
@@ -39,6 +42,8 @@ WORKDIR /app
 RUN set -eux; \
     test "$(node --version)" = "v${NODE_VERSION}"; \
     apk upgrade --no-cache; \
+    npm_root="$(npm root -g)"; \
+    rm -rf "$npm_root/npm" /usr/local/bin/npm /usr/local/bin/npx; \
     mkdir -p /home/node/.ebay-mcp/logs; \
     touch /app/.env; \
     chown -R node:node /app /home/node/.ebay-mcp
