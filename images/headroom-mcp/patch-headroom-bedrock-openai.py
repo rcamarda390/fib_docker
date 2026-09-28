@@ -16,8 +16,6 @@ params_start = text.index(params_marker)
 params_end = text.index("\n)", params_start)
 params_block = text[params_start:params_end]
 completion_param = '"max_completion_tokens"'
-if params_block.count(completion_param) > 1:
-    raise SystemExit(f"duplicate {completion_param} in the OpenAI standard-parameter tuple")
 if completion_param not in params_block:
     allowed_params_old = '''_OPENAI_STANDARD_PARAMS = (\n    "max_tokens",\n    "temperature",'''
     if text.count(allowed_params_old) != 1:
