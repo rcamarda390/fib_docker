@@ -56,11 +56,12 @@ behavior.
 
 ## Completion-token compatibility
 
-Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.39.1's
-OpenAI allowlist omits the translated name, so it otherwise places the field in
-`extra_body` and Bedrock rejects it. The downstream patch adds
-`max_completion_tokens` to Headroom's standard OpenAI parameter tuple so it is
-forwarded as a normal LiteLLM argument.
+Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.39.1
+already includes the translated name in its standard OpenAI parameters, so it
+passes through as a normal LiteLLM argument. The build-time regression verifies
+it remains top-level and does not leak into `extra_body`. The downstream patch
+only adds the parameter on older supported source shapes; it does not duplicate
+an upstream entry.
 
 ## Output-token shaping
 

@@ -15,6 +15,9 @@ def backend(provider: str):
     b.provider = provider
     b.region = "us-gov-west-1" if provider == "bedrock" else None
     b.profile_name = None
+    # Keep upstream's opt-in rollout path off so this tests the image's
+    # downstream cache carry independently.
+    b._openai_prompt_caching = False
     b.map_model_id = lambda model: f"{provider}/{model}"
     return b
 
