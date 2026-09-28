@@ -13,13 +13,13 @@ if text.count(params_marker) != 1:
         f"found {text.count(params_marker)}; review patch against the pinned Headroom source"
     )
 params_start = text.index(params_marker)
-params_end = text.index("\\n)", params_start)
+params_end = text.index("\n)", params_start)
 params_block = text[params_start:params_end]
 completion_param = '"max_completion_tokens"'
 if params_block.count(completion_param) > 1:
     raise SystemExit(f"duplicate {completion_param} in the OpenAI standard-parameter tuple")
 if completion_param not in params_block:
-    allowed_params_old = '''_OPENAI_STANDARD_PARAMS = (\\n    "max_tokens",\\n    "temperature",'''
+    allowed_params_old = '''_OPENAI_STANDARD_PARAMS = (\n    "max_tokens",\n    "temperature",'''
     if text.count(allowed_params_old) != 1:
         raise SystemExit(
             f"expected exactly 1 insertion point for {completion_param} in {path}; "
@@ -27,7 +27,7 @@ if completion_param not in params_block:
         )
     text = text.replace(
         allowed_params_old,
-        '''_OPENAI_STANDARD_PARAMS = (\\n    "max_tokens",\\n    "max_completion_tokens",\\n    "temperature",''',
+        '''_OPENAI_STANDARD_PARAMS = (\n    "max_tokens",\n    "max_completion_tokens",\n    "temperature",''',
     )
 
 old = '''            extra_body = _build_openai_extra_body(body)\n            if extra_body:\n                kwargs["extra_body"] = extra_body\n'''
