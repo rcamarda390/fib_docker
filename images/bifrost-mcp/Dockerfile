@@ -1,58 +1,35 @@
 # syntax=docker/dockerfile:1.7
 
-ARG BIFROST_VERSION=2.2.1
-ARG BIFROST_COMMIT=6493abd3d1422c9bfde95f242fd57b38e73ce881
+ARG BIFROST_VERSION=2.2.3
+ARG BIFROST_COMMIT=411d62b28b03b03bd3b4025b2cfab50af45f05f4
 
-# Go toolchain the gateway binary is compiled with. Bifrost v2.2.1 declares
+# Go toolchain the gateway binary is compiled with. Bifrost v2.2.3 declares
 # go 1.27.0 in transports/go.mod and upstream builds with this exact toolchain.
 # Xray also reads the compiler version from the binary's build info, so keep
 # the toolchain pinned and verified as part of the image supply chain.
 ARG GO_VERSION=1.27.0
 
-# Module versions that clear the Xray findings against upstream v2.2.1's
-# transports/go.mod:
-#   x/text v0.37.0            CVE-2026-56852 (7.5), fixed in v0.39.0; v0.41.0
-#                             is required by x/net v0.58.0 and gRPC v1.83.2
-#   x/net v0.55.0             CVE-2026-46600 (7.5), fixed in v0.56.0; v0.58.0
-#                             is required by gRPC v1.83.2
-#   x/crypto v0.53.0          CVE-2026-56854 (7.5), fixed in v0.55.0, and
-#                             CVE-2026-56855/CVE-2026-78662 (7.5), fixed in
-#                             v0.56.0
-#   go-git/v5 v5.19.1         CVE-2026-71556 (7.1), CVE-2026-71557 (6.3),
-#                             fixed in v5.19.2
-#   go-openapi/spec v0.22.3   XRAY-1032958/1032961/1032962, fixed in v0.22.7,
-#                             and XRAY-1032963 (9.3), fixed in v0.22.9
-#   swag/{json,yaml}utils     XRAY-1032959/1032960 against v0.25.4, fixed in
-#                             v0.27.1; v0.27.3 is the version go-openapi/spec
-#                             v0.22.9 itself requires, so MVS lands there
-#   go-openapi/validate       XRAY-1032963 (9.3, CWE-918) and XRAY-1032962
-#     v0.25.1                 (5.3, CWE-400), fixed in v0.26.1. These are the
-#                             same two advisories the spec pin above answers,
-#                             reported a second time against validate: it is a
-#                             separate module upstream requires on its own, so
-#                             raising spec left it behind at v0.25.1 and the
-#                             1.6.11-v8 scan still flagged it. Pulls the rest
-#                             of the go-openapi stack up with it (analysis
-#                             v0.25.5, loads v0.25.0, strfmt v0.27.0,
-#                             errors v0.22.8).
+# Keep downstream Go pins only where upstream v2.2.3 still resolves below the
+# verified Xray fix:
+#   mcp-go v0.43.2          CVE-2026-81092; fixed in v0.56.0
+#   x/crypto v0.55.0        CVE-2026-56855/CVE-2026-78662; fixed in v0.56.0
+#   go-openapi/spec v0.22.3 XRAY-1032958/1032961/1032962, fixed in v0.22.7,
+#                           and XRAY-1032963 (9.3), fixed in v0.22.9
+#   swag/{json,yaml}utils   XRAY-1032959/1032960 against v0.25.4, fixed in
+#                           v0.27.1; v0.27.3 is required by go-openapi/spec v0.22.9
+#   go-openapi/validate     XRAY-1032963 (9.3, CWE-918) and XRAY-1032962
+#     v0.25.1               (5.3, CWE-400), fixed in v0.26.1
+# Upstream v2.2.3 already requires x/text v0.41.0, x/net v0.58.0,
+# go-git/v5 v5.19.2, gRPC v1.83.2, and otel/sdk v1.45.0, so those overrides
+# are intentionally omitted.
 # Drop a pin once upstream's own go.mod requires that version or newer.
-ARG GO_TEXT_VERSION=v0.41.0
-ARG GO_NET_VERSION=v0.58.0
 ARG GO_CRYPTO_VERSION=v0.56.0
-ARG GO_GIT_VERSION=v5.19.2
 ARG GO_OPENAPI_SPEC_VERSION=v0.22.9
 ARG GO_OPENAPI_SWAG_VERSION=v0.27.3
 ARG GO_OPENAPI_VALIDATE_VERSION=v0.26.1
 # mcp-go v0.43.2 is reported by Xray as CVE-2026-81092 (6.8, CWE-346),
 # fixed in v0.56.0.
 ARG GO_MCP_GO_VERSION=v0.56.0
-# gRPC v1.82.1 is reported by Xray as CVE-2026-84445 (CWE-129, CWE-248),
-# fixed in v1.83.2. This also remains above the prior Xray fixes v1.83.1.
-ARG GO_GRPC_VERSION=v1.83.2
-# otel/sdk v1.44.0 is reported as CVE-2026-81870 (CWE-200, CWE-532).
-# The fix shipped in the upstream v1.45.0 stable module set after the Xray
-# report was generated.
-ARG GO_OTEL_SDK_VERSION=v1.45.0
 
 FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS source
 ARG BIFROST_VERSION
@@ -93,42 +70,27 @@ COPY --from=ui-builder /app/out ./bifrost-http/ui
 # build list matches. Upstream is pinned to an exact commit and every pin below
 # is an exact version, so module resolution is reproducible: a mismatch means an
 # input moved and the new graph needs re-checking, not that the check is noisy.
-ARG GO_TEXT_VERSION
-ARG GO_NET_VERSION
 ARG GO_CRYPTO_VERSION
-ARG GO_GIT_VERSION
 ARG GO_OPENAPI_SPEC_VERSION
 ARG GO_OPENAPI_SWAG_VERSION
 ARG GO_OPENAPI_VALIDATE_VERSION
 ARG GO_MCP_GO_VERSION
-ARG GO_GRPC_VERSION
-ARG GO_OTEL_SDK_VERSION
 RUN set -eu; \
     GOFLAGS=-mod=mod go get \
       "github.com/mark3labs/mcp-go@${GO_MCP_GO_VERSION}" \
       "github.com/mark3labs/mcp-go/mcp@${GO_MCP_GO_VERSION}" \
-      "golang.org/x/text@${GO_TEXT_VERSION}" \
-      "golang.org/x/net@${GO_NET_VERSION}" \
       "golang.org/x/crypto@${GO_CRYPTO_VERSION}" \
-      "github.com/go-git/go-git/v5@${GO_GIT_VERSION}" \
       "github.com/go-openapi/spec@${GO_OPENAPI_SPEC_VERSION}" \
       "github.com/go-openapi/swag/jsonutils@${GO_OPENAPI_SWAG_VERSION}" \
       "github.com/go-openapi/swag/yamlutils@${GO_OPENAPI_SWAG_VERSION}" \
-      "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}" \
-      "google.golang.org/grpc@${GO_GRPC_VERSION}" \
-      "go.opentelemetry.io/otel/sdk@${GO_OTEL_SDK_VERSION}"; \
+      "github.com/go-openapi/validate@${GO_OPENAPI_VALIDATE_VERSION}"; \
     for pin in \
-      "golang.org/x/text=${GO_TEXT_VERSION}" \
-      "golang.org/x/net=${GO_NET_VERSION}" \
       "golang.org/x/crypto=${GO_CRYPTO_VERSION}" \
-      "github.com/go-git/go-git/v5=${GO_GIT_VERSION}" \
       "github.com/go-openapi/spec=${GO_OPENAPI_SPEC_VERSION}" \
       "github.com/go-openapi/swag/jsonutils=${GO_OPENAPI_SWAG_VERSION}" \
       "github.com/go-openapi/swag/yamlutils=${GO_OPENAPI_SWAG_VERSION}" \
       "github.com/go-openapi/validate=${GO_OPENAPI_VALIDATE_VERSION}" \
-      "github.com/mark3labs/mcp-go=${GO_MCP_GO_VERSION}" \
-      "google.golang.org/grpc=${GO_GRPC_VERSION}" \
-      "go.opentelemetry.io/otel/sdk=${GO_OTEL_SDK_VERSION}"; \
+      "github.com/mark3labs/mcp-go=${GO_MCP_GO_VERSION}"; \
     do \
       module="${pin%=*}"; expected="${pin##*=}"; \
       resolved="$(go list -m -f '{{.Version}}' "$module")"; \
@@ -138,7 +100,6 @@ RUN set -eu; \
       fi; \
       echo "remediated: $module $resolved"; \
     done
-
 ARG BIFROST_VERSION
 RUN go build \
       -ldflags="-w -s -X main.Version=v${BIFROST_VERSION} -extldflags '-static'" \
