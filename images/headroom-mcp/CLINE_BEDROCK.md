@@ -1,11 +1,15 @@
-# Cline 4.0.12 → Headroom 0.38.0 → AWS Bedrock
+# Cline 4.0.12 → Headroom 0.39.1 → AWS Bedrock
 
-This image carries a downstream Headroom 0.38.0 compatibility patch for Cline's
+This image carries a downstream Headroom 0.39.1 compatibility patch for Cline's
 OpenAI-compatible transport to AWS Bedrock.
+
+Headroom 0.39.1's upstream dependency lock resolves LiteLLM 1.88.1. The image
+pins LiteLLM 1.101.0, the version verified for Bedrock Converse cache-point
+conversion, and asserts that exact version in the final runtime.
 
 ## Request shaping
 
-Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.38.0 treats unknown
+Cline 4.0.12 sends `parallel_tool_calls=true`. Headroom 0.39.1 treats unknown
 OpenAI request keys as `extra_body`, and LiteLLM consequently forwards this key
 toward Bedrock, which rejects it. The downstream patch removes only
 `parallel_tool_calls` from `extra_body` when the configured Headroom provider is
@@ -52,11 +56,12 @@ behavior.
 
 ## Completion-token compatibility
 
-Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.38.0's
-OpenAI allowlist omits the translated name, so it otherwise places the field in
-`extra_body` and Bedrock rejects it. The downstream patch adds
-`max_completion_tokens` to Headroom's standard OpenAI parameter tuple so it is
-forwarded as a normal LiteLLM argument.
+Bifrost translates `max_tokens` to `max_completion_tokens`. Headroom 0.39.1
+already includes the translated name in its standard OpenAI parameters, so it
+passes through as a normal LiteLLM argument. The build-time regression verifies
+it remains top-level and does not leak into `extra_body`. The downstream patch
+only adds the parameter on older supported source shapes; it does not duplicate
+an upstream entry.
 
 ## Output-token shaping
 
@@ -66,7 +71,7 @@ The image enables Headroom's output shaper with:
 HEADROOM_OUTPUT_SHAPER=1
 ```
 
-Headroom 0.38.0 reads this setting live on each proxy request. No fixed
+Headroom 0.39.1 reads this setting live on each proxy request. No fixed
 `HEADROOM_VERBOSITY_LEVEL` is set.
 
 `headroom learn --verbosity --apply` remains a deployment-time operation because
@@ -74,7 +79,7 @@ it depends on agent session history.
 
 ## Health check in the air-gapped deployment
 
-The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.38.0's
+The image sets `HEADROOM_SKIP_UPSTREAM_CHECK=1` to suppress Headroom 0.39.1's
 external upstream readiness probe in the air-gapped Bedrock deployment. This
 does not weaken TLS verification for Bedrock traffic.
 
@@ -84,8 +89,8 @@ The patch is applied inside the main `Dockerfile` builder stage, directly to the
 venv produced from the pinned upstream source. One action now produces the
 finished image; there is no intermediate base image or second carry build.
 
-The patch script expects exactly two Headroom 0.38.0 OpenAI call sites and fails
-the build if the upstream source shape changes. Both are present at `v0.38.0`; the checked
+The patch script expects exactly two Headroom 0.39.1 OpenAI call sites and fails
+the build if the upstream source shape changes. Both are present at `v0.39.1`; the checked
 anchor verification and regression suite pass. The build compiles the patched module and runs the
 regression suite before copying the venv into the runtime image.
 
@@ -114,7 +119,8 @@ CI. From `images/headroom-mcp/`, against the real package:
 
 ```bash
 uv venv --python 3.13 /tmp/hr && \
-uv pip install --python /tmp/hr/bin/python "headroom-ai==<new-version>" && \
+export LITELLM_LOCAL_MODEL_COST_MAP=True && \
+uv pip install --python /tmp/hr/bin/python "headroom-ai==<new-version>" "litellm==1.101.0" && \
 target=$(/tmp/hr/bin/python -c 'import headroom.backends.litellm as m; print(m.__file__)') && \
 /tmp/hr/bin/python patch-headroom-bedrock-openai.py "$target" && \
 /tmp/hr/bin/python -m py_compile "$target" && \

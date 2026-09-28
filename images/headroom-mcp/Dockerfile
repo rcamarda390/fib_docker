@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-ARG HEADROOM_VERSION=0.38.0
-ARG HEADROOM_COMMIT=94206e265203acfd72a3b939e9a964e29175ad50
+ARG HEADROOM_VERSION=0.39.1
+ARG HEADROOM_COMMIT=d13e1966f820220b482a33c30bde1e926743939a
+ARG LITELLM_VERSION=1.101.0
 ARG PYTHON_VERSION=3.13.15
 ARG PYTHON_ABI=3.13
 ARG DEBIAN_SUITE=trixie
@@ -79,6 +80,7 @@ FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS builder
 ARG HEADROOM_VERSION
 ARG PYTHON_VERSION
 ARG PIP_VERSION
+ARG LITELLM_VERSION
 ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
@@ -180,6 +182,12 @@ COPY --from=source /src/headroom/ headroom/
 # LiteLLM backends. The bedrock extra adds boto3 and botocore for AWS SDK
 # support required to reach AWS Bedrock from an air-gapped GovCloud environment.
 RUN uv sync --frozen --extra proxy --extra bedrock --no-dev --no-editable
+# Headroom 0.39.1's lock resolves LiteLLM 1.88.1. Keep the Bedrock cache-point
+# conversion on the tested 1.101.0 runtime used by the preceding image release.
+RUN uv pip install --python /opt/venv/bin/python --upgrade-package litellm \
+      "litellm==${LITELLM_VERSION}" \
+    && PATH="/opt/venv/bin:${PATH}" python -c \
+      "import importlib.metadata; assert importlib.metadata.version('litellm') == '${LITELLM_VERSION}'"
 # Debian's tracker records CVE-2026-64847, CVE-2026-63374, and
 # CVE-2026-63349 against the locked AnyIO 4.12.1; all three are fixed upstream
 # in 4.14.2. Keep the upstream lock immutable, then apply this narrow runtime
@@ -192,7 +200,7 @@ RUN uv pip install --python /opt/venv/bin/python --upgrade-package anyio \
 # XRAY-1076201, XRAY-1076198, XRAY-1076197, XRAY-1076195, and XRAY-1076185
 # (each CVSS 7.4). Their fixed floor is 2.14.0. CVE-2026-85670 separately
 # fixes Tokenizers 0.22.2 in 0.23.1; Transformers 5.13.1 caps Tokenizers at
-# 0.23.0. Headroom 0.37.0's installed Transformers 5.17.0 allows
+# 0.23.0. Headroom 0.39.1's installed Transformers 5.17.0 allows
 # tokenizers>=0.23.1,<0.24.0, so 0.23.2 (the latest release in that range as
 # of the 2026-09-18 scan) is used instead of the 0.23.1 floor. This downstream
 # override is scoped to these package families; remove it when Headroom locks
@@ -327,6 +335,7 @@ EOF
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime_rootfs
 ARG HEADROOM_VERSION
 ARG HEADROOM_COMMIT
+ARG LITELLM_VERSION
 ARG PYJWT_VERSION
 ARG TOKENIZERS_VERSION
 ARG TRANSFORMERS_VERSION
@@ -539,9 +548,9 @@ RUN find /usr/local/lib/python${PYTHON_ABI} /opt/venv \
 # covered), not as proof of remediation. All four are open, upstream/Debian
 # findings with no fix to apply from this image build; re-scan each rebuild
 # to pick up a Debian security update once one ships.
-# Headroom 0.38.0's locked resolution supplies LiteLLM 1.101.0. The image
-# deliberately relies on that upstream resolution rather than downgrading it,
-# but this final-runtime check keeps XRAY-1062440's fixed floor fail-closed.
+# Headroom 0.39.1's SBOM/lock resolves LiteLLM 1.88.1, below the image's
+# verified 1.101.0 Bedrock-cache runtime and XRAY-1062440's fixed floor. Keep
+# the tested version pinned above and assert it survives into the final image.
 RUN PATH="/opt/venv/bin:${PATH}" python -c \
     "import importlib.util, ssl, sqlite3, hashlib, lzma, bz2, ctypes, zlib, socket; \
      assert sqlite3.sqlite_version == '${SQLITE_VERSION}', sqlite3.sqlite_version; \
@@ -554,6 +563,7 @@ RUN PATH="/opt/venv/bin:${PATH}" python -c \
  && PATH="/opt/venv/bin:${PATH}" python -c \
     "from packaging.version import Version; import boto3, botocore, importlib.metadata, jwt, litellm, tokenizers, transformers, urllib3; \
      litellm_version = importlib.metadata.version('litellm'); \
+     assert litellm_version == '${LITELLM_VERSION}', litellm_version; \
      assert Version(litellm_version) >= Version('1.96.2'), litellm_version; \
      assert importlib.metadata.version('anyio') == '${ANYIO_VERSION}'; \
      assert importlib.metadata.version('PyJWT') == '${PYJWT_VERSION}'; \
