@@ -119,7 +119,8 @@ CI. From `images/headroom-mcp/`, against the real package:
 
 ```bash
 uv venv --python 3.13 /tmp/hr && \
-uv pip install --python /tmp/hr/bin/python "headroom-ai==<new-version>" && \
+export LITELLM_LOCAL_MODEL_COST_MAP=True && \
+uv pip install --python /tmp/hr/bin/python "headroom-ai==<new-version>" "litellm==1.101.0" && \
 target=$(/tmp/hr/bin/python -c 'import headroom.backends.litellm as m; print(m.__file__)') && \
 /tmp/hr/bin/python patch-headroom-bedrock-openai.py "$target" && \
 /tmp/hr/bin/python -m py_compile "$target" && \
