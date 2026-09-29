@@ -15,10 +15,10 @@ Use these links to identify projects. Check an image's `image.yaml`, Dockerfile,
 | Zeus Dev Image | Composite image; see `images/zeus-dev-image/Dockerfile` | Check installed products individually, including https://github.com/tt-a1i/archify and https://gitlab.freedesktop.org/xdg/xdg-user-dirs | `images/zeus-dev-image` |
 | Gnosis MCP | https://pypi.org/project/gnosis-mcp/ | https://pypi.org/project/gnosis-mcp/#files | `images/gnosis-mcp` installs the PyPI package; use PyPI for version checks |
 | Gnosis (different project) | https://github.com/skorokithakis/gnosis | — | Related project; not the source of `images/gnosis-mcp` |
-| Atlassian Rovo MCP (official) | https://github.com/atlassian/atlassian-mcp-server | https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/ | Related cloud service; not the source of either Atlassian image |
-| Sooperset MCP Atlassian (used here) | https://github.com/sooperset/mcp-atlassian | https://pypi.org/project/mcp-atlassian/ | Source for both `images/atlassian-mcp` and `images/sooperset-mcp-atlassian` |
+| Atlassian Rovo MCP (official) | https://github.com/atlassian/atlassian-mcp-server | https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/ | Related cloud service; not the source of the Sooperset image |
+| Sooperset MCP Atlassian (used here) | https://github.com/sooperset/mcp-atlassian | https://pypi.org/project/mcp-atlassian/ | Source for `images/sooperset-mcp-atlassian` |
 
-The two Atlassian image directories have separate build inputs and version revisions. Check each independently. Their directory names do not imply that either image contains Atlassian's official MCP server.
+The Sooperset image does not contain Atlassian's official Rovo MCP server.
 
 ## Check all images for updates
 

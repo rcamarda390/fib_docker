@@ -17,6 +17,6 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: docker
-    directory: /images/atlassian-mcp
+    directory: /images/sooperset-mcp-atlassian
     schedule:
       interval: weekly

@@ -6,7 +6,7 @@ tag in both registries:
 - `ghcr.io/rcamarda390/<image>:<upstream-version>-v<revision>`
 - `docker.io/rcamarda390/<image>:<upstream-version>-v<revision>`
 
-The current images are `agentmemory`, `gnosis-mcp`, `atlassian-mcp`,
+The current images are `agentmemory`, `gnosis-mcp`, `sooperset-mcp-atlassian`,
 `bifrost-mcp`, `headroom-mcp`, and `sqz-mcp`. Their metadata is human-edited
 in `images/<image-dir>/image.yaml`. Published MCP builds automatically
 increment and commit the image revision. When `upstream_version` changes, the

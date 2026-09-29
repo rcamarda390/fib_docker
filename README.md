@@ -29,12 +29,11 @@ The live `main` branch contains image targets under `images/`:
 | Directory | Image | Upstream version | Revision | Notes |
 | --- | --- | ---: | ---: | --- |
 | `images/agentmemory-server/` | `agentmemory` | 0.9.29 | 1 | Self-contained AgentMemory server; builds with iii engine 0.11.2 |
-| `images/atlassian-mcp/` | `atlassian-mcp` | 0.23.0 | 12 | Atlassian MCP image |
 | `images/bifrost-mcp/` | `bifrost-mcp` | 1.6.11 | 9 | Bifrost gateway image pinned to a specific upstream commit |
 | `images/gnosis-mcp/` | `gnosis-mcp` | 0.17.5 | 11 | Air-gap Gnosis documentation MCP server with local embeddings |
 | `images/headroom-mcp/` | `headroom-mcp` | 0.38.0 | 1 | Headroom proxy/MCP image with Bedrock-oriented variants |
 | `images/litellm/` | `litellm` | 1.94.3 | 1 | LiteLLM AI Gateway built from a pinned upstream commit |
-| `images/sooperset-mcp-atlassian/` | `sooperset-mcp-atlassian` | 1.0.0 | 9 | Sooperset Atlassian MCP image |
+| `images/sooperset-mcp-atlassian/` | `sooperset-mcp-atlassian` | 0.23.1 | 6 | Sooperset Atlassian MCP image |
 | `images/sqz-mcp/` | `sqz-mcp` | 1.3.0 | 4 | SQZ MCP image pinned to a specific upstream commit |
 
 The repository root currently also contains:
@@ -58,7 +57,6 @@ The primary image structure is therefore:
 ```text
 images/
 ├── agentmemory-server/
-├── atlassian-mcp/
 ├── bifrost-mcp/
 ├── gnosis-mcp/
 ├── headroom-mcp/
@@ -130,7 +128,6 @@ The live workflow inventory includes image-specific entry-point workflows:
 ```text
 .github/workflows/
 ├── build-agentmemory-server.yml
-├── build-atlassian-mcp.yml
 ├── build-bifrost-mcp.yml
 ├── build-gnosis-mcp.yml
 ├── build-headroom-mcp.yml
@@ -355,23 +352,19 @@ The project removed or avoided custom Go dependency overrides that downgraded de
 
 When maintaining the Bifrost image, prefer an upstream-compatible build unless a documented air-gap or security requirement makes a divergence necessary.
 
-## Atlassian MCP images
+## Sooperset MCP Atlassian image
 
-The repository currently carries two Atlassian-oriented image targets:
+The repository builds the Sooperset MCP Atlassian project from:
 
 ```text
-images/atlassian-mcp/
 images/sooperset-mcp-atlassian/
 ```
 
-Current manifest versions are:
+The image manifest defines its current upstream version and local revision:
 
 ```text
-atlassian-mcp            0.23.0  revision 12
-sooperset-mcp-atlassian  1.0.0   revision 9
+images/sooperset-mcp-atlassian/image.yaml
 ```
-
-These are distinct build targets and should remain documented and maintained independently rather than treating one as an alias for the other.
 
 ## SQZ MCP image
 

@@ -353,16 +353,7 @@ Temporary Headroom edits proven in a running container must be folded back into 
   upgrade. Keep a local patch only if the selected upstream release regresses
   the combined lifespan behavior.
 
-### Atlassian MCP — `images/atlassian-mcp/`
-
-- Treat Alpine and Python package versions in `image.yaml` as intentional build inputs.
-- When Xray supplies a fixed package version, update to that version or newer.
-- Validate the requested package version exists in the selected Alpine repository.
-- Do not silently switch base distributions without a justified remediation reason.
-
 ### Sooperset MCP Atlassian — `images/sooperset-mcp-atlassian/`
-
-This is distinct from `atlassian-mcp`. Do not merge their assumptions or treat one as an alias for the other.
 
 Past successful Xray remediation is precedent: apply scanner fix versions in the image build, rebuild, then verify with a new scan.
 
