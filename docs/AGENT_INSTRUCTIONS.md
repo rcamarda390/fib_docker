@@ -8,6 +8,8 @@
 
 Repository: `https://github.com/rcamarda390/fib_docker`
 
+Project and image upstream URLs: [`docs/PROJECT_URLS.md`](PROJECT_URLS.md). Consult it when identifying an image's source or reviewing updates.
+
 ## Purpose
 
 This repository builds, validates, scans, and publishes reproducible Docker images for connected-build and restricted-runtime environments.
