@@ -72,11 +72,11 @@ jobs:
               continue
             fi
 
-            latest_tag=$(jq -r --arg prefix "$tag_strip_prefix" \
+            latest_tag=$(jq -r --arg prefix "$tag_strip" \
               '[.[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith($prefix))][0].tag_name // empty' \
               <<< "$release_data")
             if [ -z "$latest_tag" ]; then
-              echo "  No stable release with tag prefix '${tag_strip_prefix}' in ${upstream_repo}, skipping"
+              echo "  No stable release with tag prefix '${tag_strip}' in ${upstream_repo}, skipping"
               continue
             fi
 
