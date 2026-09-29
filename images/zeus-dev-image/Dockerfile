@@ -2,23 +2,9 @@
 # ============================================================
 # zeus-dev-image -- base image candidate
 # ============================================================
-# Builds a UBI9/Python 3.11 base image and installs additional tooling from
-# public upstream sources (AgentMemory, Cline, Claude Code,
-# Archify, Airflow, SQLFluff, and GitLab MCP dependencies). Built here
-# (public GitHub Actions) because the real target
-# base -- artifactory.<redacted>/beds-docker/beds-ubi9-python3.11 -- is
-# air-gapped and unreachable from this runner. You import the published
-# candidate into artifactory yourself, Xray it, and promote it to replace
-# that base image if it passes.
-#
-# sqz and cline-*.vsix are intentionally skipped -- see README.md.
-#
-# Everything else (users, entrypoint, jirashell/new_prompt/verify-
-# installation/agentmemory-mcp scripts) is untouched; that stays with your
-# existing downstream build.
-#
-# Build command: docker build --no-cache -t zeus-dev-image:external .
-# Run command:   docker run --rm -it zeus-dev-image:external /bin/bash
+# Public software layer for the restricted-environment developer image.
+# Internal users, site configuration, mounts, and startup behavior belong
+# in the downstream Dockerfile after this image passes Xray.
 
 # ============================================================
 # Archify CLI source -- fetch the exact commit without carrying Git metadata
@@ -88,21 +74,10 @@ LABEL org.opencontainers.image.title="zeus-dev-image" \
       org.opencontainers.image.description="UBI9/Python 3.11 base image candidate: Airflow, AWS CLI, Cline, Claude Code, AgentMemory MCP" \
       org.opencontainers.image.version="${ZEUS_DEV_IMAGE_VERSION}"
 
-# ============================================================
-# Build mode (test|production) - controls whether the final
-# installation verification step fails the build on missing
-# required software. Defaults to "test" (safe) when built
-# directly with `docker build` without --build-arg BUILD_MODE.
-# ============================================================
-ARG BUILD_MODE=test
-
-# ============================================================
-# Airflow runtime directories
-# ============================================================
-ENV AIRFLOW_HOME=/opt/airflow
+# Archify must not check for updates when running in the restricted environment.
 ENV ARCHIFY_UPDATE_CHECK_DISABLED=1
 # PostgreSQL 15 from PGDG installs its client binaries outside the default
-# RHEL path. Keep psql directly available to users and downstream scripts.
+# RHEL path.
 ENV PATH=/usr/pgsql-15/bin:${PATH}
 
 # ============================================================
@@ -158,14 +133,6 @@ RUN dnf install -y htop btop \
     || echo "WARNING: htop/btop not available in repository, continuing build"
 
 # ============================================================
-# AgentMemory MCP wrapper script
-# ============================================================
-# Only referenced at container runtime, so it is safe to install here even
-# though /opt/agentmemory doesn't exist yet at this point in the build.
-COPY agentmemory-mcp.sh /usr/local/bin/agentmemory-mcp.sh
-RUN chmod +x /usr/local/bin/agentmemory-mcp.sh
-
-# ============================================================
 # Install Docker CLI (optional - continues on failure)
 # ============================================================
 # Base image uses microdnf which doesn't support config-manager.
@@ -191,54 +158,6 @@ RUN set -e; \
 # ============================================================
 RUN dnf install -y unzip-6.0-60.el9 \
     || echo "WARNING: unzip-6.0-60.el9 not available in repository, continuing build"
-
-# ============================================================
-# Create developer groups and users, and .ssh directories
-# Single source of truth: username:uid:group
-# To add a developer, add one line to the $users list below.
-# ============================================================
-RUN set -eux; \
-    getent group dev      >/dev/null 2>&1 || groupadd -g 1003 dev; \
-    getent group ec2-user >/dev/null 2>&1 || groupadd -g 1000 ec2-user; \
-    \
-    users=" \
-        srjohnson9:1032:dev \
-        cfarias:1027:dev \
-        nlombardi:1026:dev \
-        koacheampong:1045:dev \
-        lsimpson:1056:dev \
-        sadugassa:1021:dev \
-        aftebeje:1037:dev \
-        hmbonda:1019:dev \
-        racamarda:1033:dev \
-        jleichty:1018:dev \
-        pvuong:1017:dev \
-        jpkrieger:1025:dev \
-        lrichardson3:1047:dev \
-        cchao:1050:dev \
-        csearles:1058:dev \
-        demeadows:1051:dev \
-        sklian:1055:dev \
-        ojabulefon:1057:dev \
-        ec2-user:1000:ec2-user \
-    "; \
-    \
-    for entry in $users; do \
-        uname=$(echo "$entry" | cut -d: -f1); \
-        uid=$(echo "$entry"   | cut -d: -f2); \
-        grp=$(echo "$entry"   | cut -d: -f3); \
-        \
-        id -u "$uname" >/dev/null 2>&1 \
-            || useradd -m -u "$uid" -g "$grp" -s /bin/bash "$uname"; \
-        \
-        mkdir -p /home/$uname/.ssh; \
-        chown $uname:$grp /home/$uname/.ssh; \
-        chmod 700 /home/$uname/.ssh; \
-        \
-        mkdir -p /home/$uname/.local/bin; \
-        ln -sf /bin/python3 /home/$uname/.local/bin/python; \
-        chown -R $uname:$grp /home/$uname/.local; \
-    done
 
 # ============================================================
 # npm registry: default npmjs.org (no configuration needed)
@@ -356,93 +275,11 @@ RUN ln -sf /opt/archify/bin/archify.mjs /usr/local/bin/archify \
     && echo "Archify version: ${archify_version}" \
     && test "${archify_version}" = "2.17.0-dev.1"
 
-# ============================================================
-# Claude Code wrapper: unset AWS_PROFILE for Bedrock/IMDS auth without
-# changing the global AWS_PROFILE other tooling depends on.
-# ============================================================
-RUN set -eux; \
-    real_claude="$(command -v claude)"; \
-    mv "$real_claude" "${real_claude}.real"; \
-    printf '#!/bin/sh\n\nexec env -u AWS_PROFILE "%s.real" "$@"\n' "$real_claude" > "$real_claude"; \
-    chmod +x "$real_claude"; \
-    claude --version
-
-# ============================================================
-# Install jirashell CLI wrapper
-# ============================================================
-COPY jirashell.sh /usr/local/bin/jirashell
-RUN chmod 755 /usr/local/bin/jirashell
-
-# ============================================================
-# Airflow directory structure and permissions
-# ============================================================
-RUN mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins /opt/airflow/config \
-    && chgrp -R dev /opt/airflow \
-    && chmod 2775 /opt/airflow \
-    && chmod -R g+rwX /opt/airflow \
-    && find /opt/airflow -type d -exec chmod g+s {} \;
-
-# ============================================================
-# Shared host-tmp directory
-# ============================================================
-RUN mkdir -p /host-tmp \
-    && chmod 1777 /host-tmp \
-    && chown root:root /host-tmp
-
-# ============================================================
-# Ensure /tmp is world-writable with the sticky bit set (1777). The base
-# image is pulled via a mutable ":latest" tag and has shipped /tmp as 755
-# root:root before; pin the permission explicitly so this container never
-# depends on whatever the base image currently ships.
-# ============================================================
-RUN chmod 1777 /tmp
-
-# ============================================================
-# Copy new_prompt.sh for custom shell prompt
-# ============================================================
-COPY new_prompt.sh /usr/local/share/new_prompt.sh
-RUN set -eu; \
-    chmod 644 /usr/local/share/new_prompt.sh; \
-    touch /etc/bash.bashrc; \
-    grep -qxF '. /usr/local/share/new_prompt.sh' /etc/bash.bashrc \
-        || printf '\n. /usr/local/share/new_prompt.sh\n' >> /etc/bash.bashrc
-
-# ============================================================
-# Entrypoint
-# ============================================================
-COPY dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
-RUN chmod 755 /usr/local/bin/dev-entrypoint.sh
-
-# ============================================================
-# Installation Verification
-# ============================================================
+# Fail the build if required software is missing.
 COPY verify-installation.sh /usr/local/bin/verify-installation.sh
 RUN chmod 755 /usr/local/bin/verify-installation.sh \
-    && echo "" \
-    && echo "================================================================================" \
-    && echo "RUNNING INSTALLATION VERIFICATION (mode: ${BUILD_MODE})" \
-    && echo "================================================================================" \
-    && if [ "${BUILD_MODE}" = "production" ]; then \
-        /usr/local/bin/verify-installation.sh --prod; \
-    else \
-        /usr/local/bin/verify-installation.sh; \
-    fi \
-    && echo "" \
-    && echo "Installation verification completed" \
-    && cat /tmp/installation-verification-report.txt
+    && /usr/local/bin/verify-installation.sh
 
-# ============================================================
-# Exposed Ports
-# ============================================================
-# PostgreSQL connection forwarding (local port 5433)
-EXPOSE 5433
-# Redshift connection forwarding (local port 5439)
-EXPOSE 5439
-
-# ============================================================
-# Default workdir and entrypoint
-# ============================================================
-WORKDIR /opt/airflow
+# The UBI Python image defaults to an unprivileged runtime user.
 USER 1001
-ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]
-CMD ["tail", "-f", "/dev/null"]
+CMD ["/bin/bash"]
