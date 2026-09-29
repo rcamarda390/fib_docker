@@ -11,7 +11,6 @@ Use these links to identify projects. Check an image's `image.yaml`, Dockerfile,
 | OmniRoute | https://github.com/diegosouzapw/OmniRoute | https://github.com/diegosouzapw/OmniRoute/wiki/User-Guide ; https://github.com/diegosouzapw/OmniRoute/blob/release/v3.8.51/docs/guides/DOCKER_GUIDE.md | Related project; no image listed here |
 | Bifrost | https://github.com/maximhq/bifrost | https://docs.getbifrost.ai/overview | `images/bifrost-mcp` |
 | LiteLLM | https://github.com/BerriAI/litellm | https://github.com/BerriAI/litellm/releases | `images/litellm` |
-| NGINX | https://github.com/nginx/nginx | https://nginx.org/en/download.html | `images/nginx` |
 | SQZ MCP | https://github.com/ojuschugh1/sqz | https://github.com/ojuschugh1/sqz/releases | `images/sqz-mcp`; check the vendored Cargo.lock |
 | Zeus Dev Image | Composite image; see `images/zeus-dev-image/Dockerfile` | Check installed products individually, including https://github.com/tt-a1i/archify and https://gitlab.freedesktop.org/xdg/xdg-user-dirs | `images/zeus-dev-image` |
 | Gnosis MCP | https://pypi.org/project/gnosis-mcp/ | https://pypi.org/project/gnosis-mcp/#files | `images/gnosis-mcp` installs the PyPI package; use PyPI for version checks |
