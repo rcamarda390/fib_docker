@@ -64,10 +64,19 @@ jobs:
 
             current_version=$(sed -nE 's/^upstream_version:[[:space:]]*(.*)[[:space:]]*$/\1/p' "$config")
 
-            # Fetch latest non-prerelease release tag via GitHub API
-            latest_tag=$(gh api "/repos/${upstream_repo}/releases/latest" --jq '.tag_name' 2>/dev/null || echo "")
+            # Releases may share a repository across independent component streams.
+            # Choose the newest stable release whose tag matches this image's prefix.
+            release_data=$(gh api "/repos/${upstream_repo}/releases?per_page=100" 2>/dev/null || echo "")
+            if [ -z "$release_data" ]; then
+              echo "  Could not fetch releases for ${upstream_repo}, skipping"
+              continue
+            fi
+
+            latest_tag=$(jq -r --arg prefix "$tag_strip" \
+              '[.[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith($prefix))][0].tag_name // empty' \
+              <<< "$release_data")
             if [ -z "$latest_tag" ]; then
-              echo "  Could not fetch latest release for ${upstream_repo}, skipping"
+              echo "  No stable release with tag prefix '${tag_strip}' in ${upstream_repo}, skipping"
               continue
             fi
 
@@ -112,7 +121,7 @@ jobs:
             git checkout -B "$branch"
 
             # Update upstream_version
-            sed -E -i "s/^upstream_version:[[:space:]]*.*/upstream_version: ${latest_version}/" "$config"
+            sed -E -i "s|^upstream_version:[[:space:]]*.*|upstream_version: ${latest_version}|" "$config"
 
             # Update the pinned commit SHA build arg when applicable
             if [ -n "$commit_arg" ] && [ -n "$commit_sha" ]; then

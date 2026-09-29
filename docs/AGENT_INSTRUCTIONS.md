@@ -29,8 +29,7 @@ Before changing anything:
    - target-specific README/docs
 3. Inspect the target workflow: `.github/workflows/build-<target>.yml`.
 4. Inspect the shared workflow: `.github/workflows/build-image.yml`.
-5. Review this document, `docs/MCP_BUILD_METHODOLOGY.md`, and relevant image-specific documentation.
-   Use `docs/PROJECT_URLS.md` for repository, upstream, documentation, and release URLs. When asked to check for updates across the repository, follow its all-image inventory instructions.
+5. Review this document, `docs/MCP_BUILD_METHODOLOGY.md`, and relevant image-specific documentation. Use `docs/PROJECT_URLS.md` for upstream and release/package URLs when identifying sources or checking all images for updates; documentation links are listed where available.
 6. Check recent commits and PRs for the same image before inventing a new pattern.
 7. Do not overwrite or revert unrelated work.
 
