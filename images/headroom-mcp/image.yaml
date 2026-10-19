@@ -1,8 +1,8 @@
 name: headroom-mcp
-upstream_version: 0.39.1
+upstream_version: 0.41.0
 revision: 1
 build_args:
-  HEADROOM_COMMIT: d13e1966f820220b482a33c30bde1e926743939a
+  HEADROOM_COMMIT: 76133cff59b71284399bf760c5578dc373c97231
   LITELLM_VERSION: 1.101.0
   GLIBC_DEBIAN_VERSION: 2.41-12+deb13u4
   GLIBC_BACKPORT_VERSION: 2.41-12+deb13u4+rcamarda1
