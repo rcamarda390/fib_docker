@@ -1,8 +1,8 @@
 name: bifrost-mcp
-upstream_version: 2.2.3
+upstream_version: 2.6.0
 revision: 1
 build_args:
-  BIFROST_COMMIT: 411d62b28b03b03bd3b4025b2cfab50af45f05f4
+  BIFROST_COMMIT: 172617bb045c6f43d697843c115e64f0155ed143
 publish:
   ghcr: true
   dockerhub: true
